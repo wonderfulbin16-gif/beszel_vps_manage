@@ -101,6 +101,8 @@ github.com/nicholas-fedor/shoutrrr v0.23.0 h1:8SaNzoCpC/0rGQGLd3MYROMdljVehgt0z2
 github.com/nicholas-fedor/shoutrrr v0.23.0/go.mod h1:JB8tJB46KFrkUuF8s7FvY9HBg+ZYWcotDBVhnw0ufPQ=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
+github.com/oschwald/maxminddb-golang/v2 v2.9.1 h1:7o5EFBYe8S7+3ppDmYNaoEn1x/GZ4P9P25vxS9vBGpM=
+github.com/oschwald/maxminddb-golang/v2 v2.9.1/go.mod h1:2hxnjBWl4k944SMuyOImUAWfOnrFGXDK99Bz8o5BDpo=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 h1:XA01Vk/wv9YikCi1V51yRzIHPMT5of9+cMpZoZvDn/M=
 github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=

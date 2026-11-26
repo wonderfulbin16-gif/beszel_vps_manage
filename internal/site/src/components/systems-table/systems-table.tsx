@@ -30,6 +30,7 @@ import {
 	XIcon,
 } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { IPGeolocationCredit } from "@/components/system-ip-region"
 import { Button } from "@/components/ui/button"
 import {
 	DropdownMenu,
@@ -417,6 +418,11 @@ export default function SystemsTable() {
 				</div>
 			)}
 			<DataTablePagination table={table} showSelected={false} />
+			{table.getColumn("ip_region")?.getIsVisible() && rows.some(({ original }) => original.ip_region) && (
+				<p className="text-end mt-2">
+					<IPGeolocationCredit />
+				</p>
+			)}
 		</Card>
 	)
 }

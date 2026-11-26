@@ -252,6 +252,10 @@ msgstr "您确定吗？"
 msgid "Automatic copy requires a secure context."
 msgstr "自动复制所需的安全上下文。"
 
+#: src/components/system-ip-region.tsx
+msgid "Automatically detected from the IP after saving."
+msgstr "保存后根据 IP 自动识别。"
+
 #: src/components/routes/system/storage-pools-table.tsx
 msgctxt "Disk space available"
 msgid "Available"
@@ -1250,6 +1254,10 @@ msgstr "无效的电子邮件地址。"
 #: src/components/systems-table/systems-table-columns.tsx
 msgid "IP"
 msgstr "IP"
+
+#: src/components/system-ip-region.tsx
+msgid "IP Geolocation by DB-IP"
+msgstr "IP 地理位置由 DB-IP 提供"
 
 #: src/components/add-system.tsx
 #: src/components/systems-table/systems-table-columns.tsx

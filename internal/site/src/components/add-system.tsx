@@ -3,6 +3,7 @@ import { useStore } from "@nanostores/react"
 import { getPagePath } from "@nanostores/router"
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react"
 import { memo, useEffect, useRef, useState } from "react"
+import { SystemIPRegion } from "@/components/system-ip-region"
 import { Button } from "@/components/ui/button"
 import {
 	Dialog,
@@ -97,7 +98,6 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 		const data = Object.fromEntries(formData)
 		const metadata = {
 			ip: String(data.ip ?? "").trim(),
-			ip_region: String(data.ip_region ?? "").trim(),
 		}
 		try {
 			setOpen(false)
@@ -233,7 +233,7 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 						<Label htmlFor="ip-region" className="xs:text-end">
 							<Trans>IP Region</Trans>
 						</Label>
-						<Input id="ip-region" name="ip_region" defaultValue={system?.ip_region} maxLength={120} />
+						<SystemIPRegion region={system?.ip_region} />
 						<Label htmlFor="pkey" className="xs:text-end whitespace-pre">
 							<Trans comment="Use 'Key' if your language requires many more characters">Public Key</Trans>
 						</Label>

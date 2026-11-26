@@ -11,6 +11,7 @@ import (
 const systemIPMetadataMigration = "1795737600_system_ip_metadata.go"
 
 func TestSystemIPMetadataMigration(t *testing.T) {
+	t.Setenv("BESZEL_GEOIP_DB", "")
 	app := core.NewBaseApp(core.BaseAppConfig{DataDir: t.TempDir()})
 	require.NoError(t, app.Bootstrap())
 	t.Cleanup(func() { require.NoError(t, app.ClearBootstrap()) })
@@ -18,7 +19,7 @@ func TestSystemIPMetadataMigration(t *testing.T) {
 
 	var priorMigrations core.MigrationsList
 	for _, migration := range core.AppMigrations.Items() {
-		if migration.File != systemIPMetadataMigration {
+		if migration.File < systemIPMetadataMigration {
 			priorMigrations.Add(migration)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/henrygd/beszel/internal/alerts"
 	"github.com/henrygd/beszel/internal/email"
+	"github.com/henrygd/beszel/internal/geoip"
 	"github.com/henrygd/beszel/internal/hub/config"
 	"github.com/henrygd/beszel/internal/hub/heartbeat"
 	"github.com/henrygd/beszel/internal/hub/systems"
@@ -79,6 +80,9 @@ func onAfterBootstrapAndMigrations(app core.App, fn func(app core.App) error) er
 // StartHub sets up event handlers and starts the PocketBase server
 func (h *Hub) StartHub() error {
 	h.App.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if err := geoip.BindSystems(e.App); err != nil {
+			return err
+		}
 		// sync systems with config
 		if err := config.SyncSystems(e); err != nil {
 			return err
