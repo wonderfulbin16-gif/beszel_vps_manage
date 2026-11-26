@@ -20,7 +20,28 @@ if [ "${2:-}" != --now ] && [ -r "$state" ]; then
 fi
 
 agent_pid=$(pgrep -xo beszel-agent) || exit 0
-token=$(tr '\000' '\n' < "/proc/$agent_pid/environ" | sed -n 's/^TOKEN=//p')
+process_dir=/proc/$agent_pid
+agent_setting() {
+    tr '\000' '\n' < "$process_dir/environ" | awk -v key="$1" '
+        index($0, "BESZEL_AGENT_" key "=") == 1 {
+            print substr($0, length("BESZEL_AGENT_" key "=") + 1)
+            prefixed = 1
+            exit
+        }
+        index($0, key "=") == 1 { value = substr($0, length(key "=") + 1) }
+        END { if (!prefixed && value != "") print value }
+    '
+}
+
+token=$(agent_setting TOKEN)
+if [ -z "$token" ]; then
+    token_file=$(agent_setting TOKEN_FILE)
+    case "$token_file" in
+        '') ;;
+        /*) token=$(sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//' -e '/^#/d;/^$/d' "$token_file") ;;
+        *) token=$(sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//' -e '/^#/d;/^$/d' "$process_dir/cwd/$token_file") ;;
+    esac
+fi
 case "$token" in
     ''|*[!a-zA-Z0-9_-]*) printf '%s\n' 'Beszel Agent token is unavailable.' >&2; exit 1 ;;
 esac
