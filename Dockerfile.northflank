@@ -1,0 +1,44 @@
+FROM oven/bun:1.4.5@sha256:3aa040e5445efa09d75bb428a64ba50db13e2b3ac9b6b0c7f145615f62b2ee18 AS web
+WORKDIR /app/internal/site
+COPY internal/site ./
+RUN bun install --frozen-lockfile
+RUN bun run --bun lingui compile && bun run --bun tsc -b && bun run --bun vite build
+
+FROM golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS go-base
+RUN apk add --no-cache ca-certificates
+
+FROM go-base AS geoip
+# DB-IP removes older downloads. Framasoft retains an archive of the same bytes.
+RUN apk add --no-cache curl \
+    && mkdir -p /geoip \
+    && (curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 \
+            https://download.db-ip.com/free/dbip-city-lite-2026-11.mmdb.gz -o /tmp/db-ip.mmdb.gz \
+        || curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 \
+            https://dbip.mirror.framasoft.org/files/dbip-city-lite-2026-11.mmdb.gz -o /tmp/db-ip.mmdb.gz) \
+    && gzip -dc /tmp/db-ip.mmdb.gz > /geoip/dbip-city-lite.mmdb \
+    && echo '5f64491f77c2c78b56cd83a88db4ea6c4666874322da38805498bbb754ccc735  /geoip/dbip-city-lite.mmdb' | sha256sum -c - \
+    && rm /tmp/db-ip.mmdb.gz
+COPY internal/geoip/db-ip-notice.txt /geoip/NOTICE
+
+FROM go-base AS build
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . ./
+COPY --from=web /app/internal/site/dist ./internal/site/dist
+ENV CGO_ENABLED=0
+RUN mkdir -p /runtime/tmp /runtime/beszel_data \
+    && chmod 1777 /runtime/tmp \
+    && go build -trimpath -ldflags='-w -s' -o /runtime/beszel ./internal/cmd/hub \
+    && go build -trimpath -ldflags='-w -s' -o /runtime/agent ./internal/cmd/agent \
+    && go build -trimpath -ldflags='-w -s' -o /runtime/beszel-supervisor ./internal/cmd/northflank-supervisor
+
+FROM scratch
+COPY --from=build /runtime/ /
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=geoip /geoip/ /geoip/
+ENV BESZEL_GEOIP_DB=/geoip/dbip-city-lite.mmdb
+VOLUME ["/beszel_data"]
+EXPOSE 8090
+ENTRYPOINT ["/beszel-supervisor"]
+CMD ["serve", "--http=0.0.0.0:8090"]

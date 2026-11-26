@@ -1,0 +1,5 @@
+DB-IP City Lite, November 2026, Eris Networks S.A.S.
+Database source: https://db-ip.com/db/download/ip-to-city-lite
+License: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+The database file is unmodified. Beszel displays location names derived from its records.
