@@ -474,7 +474,7 @@ function SystemsTableHead({ table }: { table: TableType<SystemRecord> }) {
 				<tr key={headerGroup.id}>
 					{headerGroup.headers.map((header) => {
 						return (
-							<TableHead className="px-1.5" key={header.id}>
+							<TableHead className="px-1.5" key={header.id} style={{ minWidth: header.column.columnDef.minSize }}>
 								{flexRender(header.column.columnDef.header, header.getContext())}
 							</TableHead>
 						)

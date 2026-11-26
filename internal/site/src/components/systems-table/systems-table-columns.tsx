@@ -147,8 +147,10 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			accessorFn: ({ ip }) => ip || undefined,
 			id: "ip",
 			name: () => t`IP`,
-			cell: systemMetadataCell,
-			size: 150,
+			cell: (context) =>
+				systemMetadataCell(context, viewMode === "table" ? "whitespace-nowrap tabular-nums" : "tabular-nums wrap-anywhere"),
+			size: 160,
+			minSize: 148,
 			sortingFn: "alphanumeric",
 			invertSorting: false,
 			Icon: NetworkIcon,
@@ -159,7 +161,8 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			id: "ip_region",
 			name: () => t`IP Region`,
 			cell: systemMetadataCell,
-			size: 135,
+			size: 232,
+			minSize: 200,
 			sortingFn: "text",
 			invertSorting: false,
 			Icon: MapPinIcon,
@@ -560,13 +563,9 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 	] as ColumnDef<SystemRecord>[]
 }
 
-function systemMetadataCell({ getValue }: CellContext<SystemRecord, unknown>) {
+function systemMetadataCell({ getValue }: CellContext<SystemRecord, unknown>, className = "wrap-anywhere") {
 	const value = getValue() as string | undefined
-	return value ? (
-		<bdi className="block max-w-44 [overflow-wrap:anywhere]">{value}</bdi>
-	) : (
-		<span className="text-muted-foreground">—</span>
-	)
+	return value ? <bdi className={cn("block", className)}>{value}</bdi> : <span className="text-muted-foreground">—</span>
 }
 
 function sortableHeader(context: HeaderContext<SystemRecord, unknown>) {
