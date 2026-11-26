@@ -11,7 +11,9 @@ import {
 	ClockArrowUp,
 	CpuIcon,
 	HardDriveIcon,
+	MapPinIcon,
 	MemoryStickIcon,
+	NetworkIcon,
 	PackageIcon,
 	ServerIcon,
 	TerminalSquareIcon,
@@ -139,6 +141,28 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 					</>
 				)
 			},
+			header: sortableHeader,
+		},
+		{
+			accessorFn: ({ ip }) => ip || undefined,
+			id: "ip",
+			name: () => t`IP`,
+			cell: systemMetadataCell,
+			size: 150,
+			sortingFn: "alphanumeric",
+			invertSorting: false,
+			Icon: NetworkIcon,
+			header: sortableHeader,
+		},
+		{
+			accessorFn: ({ ip_region }) => ip_region || undefined,
+			id: "ip_region",
+			name: () => t`IP Region`,
+			cell: systemMetadataCell,
+			size: 135,
+			sortingFn: "text",
+			invertSorting: false,
+			Icon: MapPinIcon,
 			header: sortableHeader,
 		},
 		{
@@ -534,6 +558,15 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			),
 		},
 	] as ColumnDef<SystemRecord>[]
+}
+
+function systemMetadataCell({ getValue }: CellContext<SystemRecord, unknown>) {
+	const value = getValue() as string | undefined
+	return value ? (
+		<bdi className="block max-w-44 [overflow-wrap:anywhere]">{value}</bdi>
+	) : (
+		<span className="text-muted-foreground">—</span>
+	)
 }
 
 function sortableHeader(context: HeaderContext<SystemRecord, unknown>) {

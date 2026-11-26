@@ -653,7 +653,8 @@ func (sys *System) getRecord(app core.App) (*core.Record, error) {
 		}
 		return nil, err
 	}
-	return record, nil
+	// Background status and stats writes should preserve concurrent user edits.
+	return record.IgnoreUnchangedFields(true), nil
 }
 
 // HasUser checks if the given user is in the system's users list.

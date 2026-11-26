@@ -55,3 +55,24 @@ func TestGetRecordRemovesDeletedSystem(t *testing.T) {
 	assert.False(t, sm.HasSystem(sys.Id), "deleted system should be removed")
 	assert.Error(t, sys.ctx.Err(), "updater context should be cancelled")
 }
+
+func TestBackgroundRecordUpdatePreservesConcurrentIPMetadata(t *testing.T) {
+	sys, app := newTestSystemWithHub(t)
+	background, err := sys.getRecord(app)
+	require.NoError(t, err)
+
+	userEdit, err := app.FindRecordById("systems", sys.Id)
+	require.NoError(t, err)
+	userEdit.Set("ip", "2001:db8::5")
+	userEdit.Set("ip_region", "Tokyo")
+	require.NoError(t, app.SaveNoValidate(userEdit))
+
+	background.Set("status", down)
+	require.NoError(t, app.SaveNoValidate(background))
+
+	stored, err := app.FindRecordById("systems", sys.Id)
+	require.NoError(t, err)
+	assert.Equal(t, "2001:db8::5", stored.GetString("ip"))
+	assert.Equal(t, "Tokyo", stored.GetString("ip_region"))
+	assert.Equal(t, down, stored.GetString("status"))
+}

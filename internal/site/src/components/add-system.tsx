@@ -94,15 +94,25 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault()
 		const formData = new FormData(e.target as HTMLFormElement)
-		const data = Object.fromEntries(formData) as Record<string, any>
+		const data = Object.fromEntries(formData)
+		const metadata = {
+			ip: String(data.ip ?? "").trim(),
+			ip_region: String(data.ip_region ?? "").trim(),
+		}
 		try {
 			setOpen(false)
 			if (system) {
 				// Don't send users on update, or other users of a shared system would be removed
-				await pb.collection("systems").update(system.id, { ...data, status: SystemStatus.Pending })
+				const settingsChanged =
+					data.name !== system.name || data.host !== system.host || (!isUnixSocket && data.port !== system.port)
+				await pb.collection("systems").update(
+					system.id,
+					settingsChanged ? { ...data, ...metadata, status: SystemStatus.Pending } : metadata
+				)
 			} else {
 				const createdSystem = await pb.collection("systems").create({
 					...data,
+					...metadata,
 					users: pb.authStore.record!.id,
 				})
 				await pb.collection("fingerprints").create({
@@ -121,7 +131,7 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 
 	return (
 		<DialogContent
-			className="w-[90%] sm:w-auto sm:ns-dialog max-w-full rounded-lg"
+			className="w-[90%] sm:w-auto sm:ns-dialog max-w-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg"
 			onCloseAutoFocus={() => {
 				setHostValue(system?.host ?? "")
 			}}
@@ -216,6 +226,14 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 							required={!isUnixSocket}
 							className={cn(isUnixSocket && "hidden")}
 						/>
+						<Label htmlFor="ip" className="xs:text-end">
+							<Trans>IP</Trans>
+						</Label>
+						<Input id="ip" name="ip" defaultValue={system?.ip} maxLength={64} autoCapitalize="none" spellCheck={false} />
+						<Label htmlFor="ip-region" className="xs:text-end">
+							<Trans>IP Region</Trans>
+						</Label>
+						<Input id="ip-region" name="ip_region" defaultValue={system?.ip_region} maxLength={120} />
 						<Label htmlFor="pkey" className="xs:text-end whitespace-pre">
 							<Trans comment="Use 'Key' if your language requires many more characters">Public Key</Trans>
 						</Label>
