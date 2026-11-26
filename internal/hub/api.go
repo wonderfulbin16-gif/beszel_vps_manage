@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -203,6 +204,9 @@ func (h *Hub) registerApiRoutes(se *core.ServeEvent) error {
 	apiAuth.GET("/config-yaml", config.GetYamlConfig).BindFunc(requireAdminRole)
 	// handle agent websocket connection
 	apiNoAuth.GET("/agent-connect", h.handleAgentConnect)
+	if systemID := strings.TrimSpace(os.Getenv("BESZEL_EGRESS_SYSTEM_ID")); systemID != "" {
+		apiNoAuth.POST("/agent-egress", agentEgressHandler(systemID))
+	}
 	// get, create, or delete universal tokens (POST keeps tokens out of URLs; GET is kept for legacy clients)
 	apiAuth.GET("/universal-token", h.handleUniversalToken).BindFunc(excludeReadOnlyRole)
 	apiAuth.POST("/universal-token", h.handleUniversalToken).BindFunc(excludeReadOnlyRole)
