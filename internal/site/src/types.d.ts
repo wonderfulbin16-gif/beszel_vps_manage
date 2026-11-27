@@ -424,6 +424,7 @@ export interface UserSettings {
 	layoutWidth?: number
 	lang?: string
 	cols?: Record<string, boolean>
+	systemColumnOrder?: string[]
 	statusFilter?: "all" | "up" | "down" | "paused" | "pending"
 	viewMode?: "table" | "grid"
 	sortMode?: Array<{ id: string; desc: boolean }>

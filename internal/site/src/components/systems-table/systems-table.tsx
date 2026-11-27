@@ -4,6 +4,7 @@ import { useStore } from "@nanostores/react"
 import { subscribeKeys } from "nanostores"
 import { getPagePath } from "@nanostores/router"
 import {
+	type Column,
 	type ColumnDef,
 	type ColumnFiltersState,
 	flexRender,
@@ -27,6 +28,7 @@ import {
 	LayoutListIcon,
 	LoaderCircleIcon,
 	RefreshCwIcon,
+	RotateCcwIcon,
 	Settings2Icon,
 	XIcon,
 } from "lucide-react"
@@ -61,6 +63,7 @@ import {
 	$userSettings,
 } from "@/lib/stores"
 import { refresh } from "@/lib/systemsManager"
+import { moveSystemColumn, normalizeSystemColumnOrder } from "@/lib/system-column-order"
 import { EMPTY_SYSTEM_TRAFFIC, getSystemTraffic } from "@/lib/system-traffic"
 import { cn, runOnce } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
@@ -143,11 +146,12 @@ export default function SystemsTable() {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
 		() => $userSettings.get().cols ?? JSON.parse(localStorage.getItem("besz-cols") || "{}")
 	)
+	const [savedColumnOrder, setSavedColumnOrder] = useState(() => $userSettings.get().systemColumnOrder)
 
 	// Apply settings from server once they load (handles incognito / new devices)
 	const applied = useRef(new Set<string>())
 	useEffect(() => {
-		return subscribeKeys($userSettings, ["cols", "statusFilter", "viewMode", "sortMode"], (vals) => {
+		return subscribeKeys($userSettings, ["cols", "statusFilter", "viewMode", "sortMode", "systemColumnOrder"], (vals) => {
 			if (!applied.current.has("cols") && vals.cols !== undefined) {
 				applied.current.add("cols")
 				setColumnVisibility(vals.cols)
@@ -164,7 +168,17 @@ export default function SystemsTable() {
 				applied.current.add("sortMode")
 				setSorting(vals.sortMode)
 			}
+			if (!applied.current.has("systemColumnOrder") && vals.systemColumnOrder !== undefined) {
+				applied.current.add("systemColumnOrder")
+				setSavedColumnOrder(vals.systemColumnOrder)
+			}
 		})
+	}, [])
+	const saveColumnOrder = useCallback((systemColumnOrder: string[]) => {
+		applied.current.add("systemColumnOrder")
+		setSavedColumnOrder(systemColumnOrder)
+		$userSettings.setKey("systemColumnOrder", systemColumnOrder)
+		queueUserSettings({ systemColumnOrder })
 	}, [])
 
 	const handleColumnVisibilityChange = useCallback(
@@ -246,6 +260,11 @@ export default function SystemsTable() {
 	}, [filter])
 
 	const columnDefs = useMemo(() => SystemsTableColumns(viewMode, traffic), [viewMode, traffic])
+	const defaultColumnOrder = useMemo(() => columnDefs.flatMap(({ id }) => id ?? []), [columnDefs])
+	const columnOrder = useMemo(
+		() => normalizeSystemColumnOrder(savedColumnOrder, defaultColumnOrder),
+		[savedColumnOrder, defaultColumnOrder]
+	)
 	// The table caches cell accessor values until its row model changes.
 	const tableData = useMemo(() => filteredData.slice(), [filteredData, traffic])
 
@@ -265,6 +284,7 @@ export default function SystemsTable() {
 			sorting,
 			columnFilters,
 			columnVisibility,
+			columnOrder,
 			pagination,
 		},
 		defaultColumn: {
@@ -278,7 +298,17 @@ export default function SystemsTable() {
 
 	const rows = table.getRowModel().rows
 	const columns = table.getAllColumns()
+	const orderedColumns = table.getAllLeafColumns()
 	const visibleColumns = table.getVisibleLeafColumns()
+	const visibleColumnsKey = visibleColumns.map(({ id }) => id).join(",")
+	const movableColumns = useMemo(() => orderedColumns.filter((column) => column.getCanHide()), [orderedColumns])
+	const moveColumn = useCallback(
+		(id: string, direction: -1 | 1, visible: readonly string[]) => {
+			saveColumnOrder(moveSystemColumn(columnOrder, id, direction, visible))
+		},
+		[columnOrder, saveColumnOrder]
+	)
+	const isDefaultColumnOrder = columnOrder.every((id, index) => id === defaultColumnOrder[index])
 
 	const [upSystemsLength, downSystemsLength, pausedSystemsLength] = useMemo(() => {
 		return [Object.values(upSystems).length, Object.values(downSystems).length, Object.values(pausedSystems).length]
@@ -334,7 +364,10 @@ export default function SystemsTable() {
 									<Settings2Icon className="size-4 opacity-80" />
 								</Button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="h-72 md:h-auto min-w-48 md:min-w-auto overflow-y-auto">
+							<DropdownMenuContent
+								align="end"
+								className="h-72 md:h-auto min-w-48 md:min-w-auto max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
+							>
 								<div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-s md:divide-y-0">
 									<div className="border-r">
 										<DropdownMenuLabel className="pt-2 px-3.5 flex items-center gap-2">
@@ -417,30 +450,12 @@ export default function SystemsTable() {
 										</div>
 									</div>
 
-									<div>
-										<DropdownMenuLabel className="pt-2 px-3.5 flex items-center gap-2">
-											<EyeIcon className="size-4" />
-											<Trans>Visible Fields</Trans>
-										</DropdownMenuLabel>
-										<DropdownMenuSeparator />
-										<div className="px-1.5 pb-1">
-											{columns
-												.filter((column) => column.getCanHide())
-												.map((column) => {
-													return (
-														<DropdownMenuCheckboxItem
-															key={column.id}
-															onSelect={(e) => e.preventDefault()}
-															checked={column.getIsVisible()}
-															onCheckedChange={(value) => column.toggleVisibility(!!value)}
-														>
-															{/* @ts-ignore */}
-															{column.columnDef.name()}
-														</DropdownMenuCheckboxItem>
-													)
-												})}
-										</div>
-									</div>
+									<VisibleColumnsMenu
+										columns={movableColumns}
+										moveColumn={moveColumn}
+										reset={() => saveColumnOrder([])}
+										isDefault={isDefaultColumnOrder}
+									/>
 								</div>
 							</DropdownMenuContent>
 						</DropdownMenu>
@@ -449,7 +464,12 @@ export default function SystemsTable() {
 			</CardHeader>
 		)
 	}, [
-		visibleColumns.length,
+		visibleColumnsKey,
+		columns,
+		movableColumns,
+		moveColumn,
+		saveColumnOrder,
+		isDefaultColumnOrder,
 		sorting,
 		viewMode,
 		locale,
@@ -476,14 +496,20 @@ export default function SystemsTable() {
 			{viewMode === "table" ? (
 				// table layout
 				<div className="rounded-md">
-					<AllSystemsTable table={table} rows={rows} colLength={visibleColumns.length} isLoading={!systemsLoaded} />
+					<AllSystemsTable
+						table={table}
+						rows={rows}
+						colLength={visibleColumns.length}
+						columnKey={visibleColumnsKey}
+						isLoading={!systemsLoaded}
+					/>
 				</div>
 			) : (
 				// grid layout
 				<div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
 					{rows?.length ? (
 						rows.map((row) => {
-							return <SystemCard key={row.original.id} row={row} table={table} colLength={visibleColumns.length} />
+							return <SystemCard key={row.original.id} row={row} table={table} columnKey={visibleColumnsKey} />
 						})
 					) : (
 						<div className="col-span-full text-center py-8">
@@ -506,16 +532,100 @@ export default function SystemsTable() {
 	)
 }
 
+function VisibleColumnsMenu({
+	columns,
+	moveColumn,
+	reset,
+	isDefault,
+}: {
+	columns: Column<SystemRecord>[]
+	moveColumn: (id: string, direction: -1 | 1, visible: readonly string[]) => void
+	reset: () => void
+	isDefault: boolean
+}) {
+	const { t } = useLingui()
+	const visible = columns.filter((column) => column.getIsVisible()).map(({ id }) => id)
+	return (
+		<div className="min-w-44">
+			<DropdownMenuLabel className="pt-2 px-3.5 flex items-center gap-2">
+				<EyeIcon className="size-4" />
+				<Trans>Visible Fields</Trans>
+			</DropdownMenuLabel>
+			<DropdownMenuSeparator />
+			<div className="px-1.5 pb-1">
+				{columns.map((column) => {
+					const { id } = column
+					// @ts-expect-error column definitions include a translated menu name
+					const name: string = column.columnDef.name()
+					const position = visible.indexOf(id)
+					const up = t`Move ${name} up`
+					const down = t`Move ${name} down`
+					return (
+						<div key={id} className="flex items-center">
+							<DropdownMenuCheckboxItem
+								className="min-w-0 flex-1 pe-1"
+								onSelect={(event) => event.preventDefault()}
+								checked={position >= 0}
+								onCheckedChange={(checked) => column.toggleVisibility(!!checked)}
+							>
+								{name}
+							</DropdownMenuCheckboxItem>
+							<DropdownMenuItem
+								className="size-7 shrink-0 justify-center p-0 data-disabled:opacity-25"
+								aria-label={up}
+								title={up}
+								disabled={position <= 0}
+								onSelect={(event) => {
+									event.preventDefault()
+									moveColumn(id, -1, visible)
+								}}
+							>
+								<ArrowUpIcon className="size-3.5" aria-hidden="true" />
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								className="size-7 shrink-0 justify-center p-0 data-disabled:opacity-25"
+								aria-label={down}
+								title={down}
+								disabled={position < 0 || position >= visible.length - 1}
+								onSelect={(event) => {
+									event.preventDefault()
+									moveColumn(id, 1, visible)
+								}}
+							>
+								<ArrowDownIcon className="size-3.5" aria-hidden="true" />
+							</DropdownMenuItem>
+						</div>
+					)
+				})}
+				<DropdownMenuSeparator />
+				<DropdownMenuItem
+					className="gap-2"
+					disabled={isDefault}
+					onSelect={(event) => {
+						event.preventDefault()
+						reset()
+					}}
+				>
+					<RotateCcwIcon className="size-4" aria-hidden="true" />
+					<Trans>Reset column order</Trans>
+				</DropdownMenuItem>
+			</div>
+		</div>
+	)
+}
+
 const AllSystemsTable = memo(
 	({
 		table,
 		rows,
 		colLength,
+		columnKey,
 		isLoading,
 	}: {
 		table: TableType<SystemRecord>
 		rows: Row<SystemRecord>[]
 		colLength: number
+		columnKey: string
 		isLoading: boolean
 	}) => {
 		// based on all filtered rows rather than the current page, so every page uses the same height
@@ -526,7 +636,7 @@ const AllSystemsTable = memo(
 					<SystemsTableHead table={table} />
 					<TableBody onMouseEnter={preloadSystemDetail}>
 						{rows.length ? (
-							rows.map((row) => <SystemTableRow key={row.id} row={row} rowHeight={rowHeight} colLength={colLength} />)
+							rows.map((row) => <SystemTableRow key={row.id} row={row} rowHeight={rowHeight} columnKey={columnKey} />)
 						) : (
 							<TableRow>
 								<TableCell colSpan={colLength} className="h-37 text-center pointer-events-none">
@@ -565,7 +675,7 @@ function SystemsTableHead({ table }: { table: TableType<SystemRecord> }) {
 }
 
 const SystemTableRow = memo(
-	({ row, rowHeight, colLength }: { row: Row<SystemRecord>; rowHeight: number; colLength: number }) => {
+	({ row, rowHeight, columnKey }: { row: Row<SystemRecord>; rowHeight: number; columnKey: string }) => {
 		const system = row.original
 		const { t } = useLingui()
 		return useMemo(() => {
@@ -590,12 +700,12 @@ const SystemTableRow = memo(
 					))}
 				</TableRow>
 			)
-		}, [row, system, colLength, rowHeight, t])
+		}, [row, system, columnKey, rowHeight, t])
 	}
 )
 
 const SystemCard = memo(
-	({ row, table, colLength }: { row: Row<SystemRecord>; table: TableType<SystemRecord>; colLength: number }) => {
+	({ row, table, columnKey }: { row: Row<SystemRecord>; table: TableType<SystemRecord>; columnKey: string }) => {
 		const system = row.original
 		const { t } = useLingui()
 
@@ -632,10 +742,9 @@ const SystemCard = memo(
 							className="grid gap-2.5"
 							style={{ gridTemplateColumns: "24px minmax(80px, max-content) minmax(0, 1fr)" }}
 						>
-							{table.getAllColumns().map((column) => {
-								if (!column.getIsVisible() || column.id === "system" || column.id === "actions") return null
-								const cell = row.getAllCells().find((cell) => cell.column.id === column.id)
-								if (!cell) return null
+							{row.getVisibleCells().map((cell) => {
+								const { column } = cell
+								if (column.id === "system" || column.id === "actions") return null
 								// @ts-expect-error
 								const { Icon, name } = column.columnDef as ColumnDef<SystemRecord, unknown>
 								return (
@@ -666,6 +775,6 @@ const SystemCard = memo(
 					</Link>
 				</Card>
 			)
-		}, [row, system, colLength, t])
+		}, [row, system, columnKey, t])
 	}
 )

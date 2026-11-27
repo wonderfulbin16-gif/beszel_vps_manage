@@ -2706,3 +2706,15 @@ msgstr "取樣範圍 {first} 至 {last}"
 #: src/components/systems-table/systems-table.tsx
 msgid "Unable to refresh 30-day traffic."
 msgstr "暫時無法重新整理 30 天流量。"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Move {name} up"
+msgstr "上移 {name}"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Move {name} down"
+msgstr "下移 {name}"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Reset column order"
+msgstr "還原預設順序"

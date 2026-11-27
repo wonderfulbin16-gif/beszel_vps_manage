@@ -2747,3 +2747,15 @@ msgstr "Recorded samples: {first}–{last}"
 #: src/components/systems-table/systems-table.tsx
 msgid "Unable to refresh 30-day traffic."
 msgstr "Unable to refresh 30-day traffic."
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Move {name} up"
+msgstr "Move {name} up"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Move {name} down"
+msgstr "Move {name} down"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Reset column order"
+msgstr "Reset column order"
