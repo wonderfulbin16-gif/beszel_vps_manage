@@ -61,6 +61,7 @@ import {
 	$userSettings,
 } from "@/lib/stores"
 import { refresh } from "@/lib/systemsManager"
+import { EMPTY_SYSTEM_TRAFFIC, getSystemTraffic } from "@/lib/system-traffic"
 import { cn, runOnce } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
 import AlertButton from "../alerts/alert-button"
@@ -82,17 +83,49 @@ export default function SystemsTable() {
 	const pausedSystems = $pausedSystems.get()
 	const { i18n, t } = useLingui()
 	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [traffic, setTraffic] = useState(EMPTY_SYSTEM_TRAFFIC)
+	const [trafficError, setTrafficError] = useState(false)
+	const trafficRequest = useRef<{ controller: AbortController; promise: Promise<void> } | undefined>(undefined)
+	const refreshTraffic = useCallback(() => {
+		if (trafficRequest.current) return trafficRequest.current.promise
+		const controller = new AbortController()
+		const promise = getSystemTraffic(controller.signal)
+			.then((systems) => {
+				if (controller.signal.aborted) return
+				setTraffic(systems)
+				setTrafficError(false)
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) setTrafficError(true)
+			})
+			.finally(() => {
+				if (trafficRequest.current?.controller === controller) trafficRequest.current = undefined
+			})
+		trafficRequest.current = { controller, promise }
+		return promise
+	}, [])
+	useEffect(() => {
+		void refreshTraffic()
+		const timer = setInterval(() => {
+			if (!document.hidden) void refreshTraffic()
+		}, 5 * 60 * 1000)
+		return () => {
+			clearInterval(timer)
+			trafficRequest.current?.controller.abort()
+			trafficRequest.current = undefined
+		}
+	}, [refreshTraffic])
 	const refreshSystems = useCallback(async () => {
 		setIsRefreshing(true)
 		try {
-			await refresh()
+			await Promise.all([refresh(), refreshTraffic()])
 			if ($authenticated.get()) toast({ title: t`Systems refreshed` })
 		} catch {
 			if ($authenticated.get()) toast({ title: t`Failed to refresh systems`, variant: "destructive" })
 		} finally {
 			setIsRefreshing(false)
 		}
-	}, [t])
+	}, [refreshTraffic, t])
 	const [filter, setFilter] = useState<string>("")
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>(
 		() =>
@@ -212,10 +245,12 @@ export default function SystemsTable() {
 		}
 	}, [filter])
 
-	const columnDefs = useMemo(() => SystemsTableColumns(viewMode), [viewMode])
+	const columnDefs = useMemo(() => SystemsTableColumns(viewMode, traffic), [viewMode, traffic])
+	// The table caches cell accessor values until its row model changes.
+	const tableData = useMemo(() => filteredData.slice(), [filteredData, traffic])
 
 	const table = useReactTable({
-		data: filteredData,
+		data: tableData,
 		columns: columnDefs,
 		getCoreRowModel: getCoreRowModel(),
 		onSortingChange: handleSortingChange,
@@ -433,6 +468,11 @@ export default function SystemsTable() {
 			<div className="mb-3 sm:mb-4">
 				<ClusterCapacity systems={data} />
 			</div>
+			{trafficError && (
+				<p role="status" className="mb-2 text-sm text-muted-foreground">
+					<Trans>Unable to refresh 30-day traffic.</Trans>
+				</p>
+			)}
 			{viewMode === "table" ? (
 				// table layout
 				<div className="rounded-md">
@@ -550,7 +590,7 @@ const SystemTableRow = memo(
 					))}
 				</TableRow>
 			)
-		}, [system, system.status, colLength, rowHeight, t])
+		}, [row, system, colLength, rowHeight, t])
 	}
 )
 
@@ -626,6 +666,6 @@ const SystemCard = memo(
 					</Link>
 				</Card>
 			)
-		}, [system, colLength, t])
+		}, [row, system, colLength, t])
 	}
 )

@@ -226,6 +226,7 @@ func (h *Hub) registerApiRoutes(se *core.ServeEvent) error {
 	apiAuth.GET("/systemd/logs", h.getSystemdLogs)
 	// get pending package updates
 	apiAuth.GET("/package-updates", h.getPackageUpdates)
+	apiAuth.GET("/network-traffic", getNetworkTraffic)
 	// /containers routes
 	if enabled, _ := utils.GetEnv("CONTAINER_DETAILS"); enabled != "false" {
 		// get container logs

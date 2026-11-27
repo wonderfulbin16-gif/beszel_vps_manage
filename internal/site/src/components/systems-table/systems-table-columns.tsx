@@ -6,7 +6,9 @@ import { getPagePath } from "@nanostores/router"
 import type { CellContext, ColumnDef, HeaderContext } from "@tanstack/react-table"
 import type { ClassValue } from "clsx"
 import {
+	ArrowDownToLineIcon,
 	ArrowUpDownIcon,
+	ArrowUpFromLineIcon,
 	ChevronRightSquareIcon,
 	ClockArrowUp,
 	CpuIcon,
@@ -23,11 +25,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { availableMemoryGiB, type CapacityMetric, effectiveCapacity } from "@/lib/cluster-capacity"
 import { BatteryState, ConnectionType, connectionTypeLabels, MeterState, SystemStatus } from "@/lib/enums"
 import { $userSettings } from "@/lib/stores"
+import type { SystemTraffic, SystemTrafficById } from "@/lib/system-traffic"
 import {
 	cn,
 	decimalString,
 	formatBytes,
 	formatNumber,
+	formatShortDate,
 	formatTemperature,
 	parseSemVer,
 	secondsToUptimeString,
@@ -83,7 +87,23 @@ function getMeterStateByThresholds(value: number, warn = 65, crit = 90): MeterSt
  * @param viewMode - "table" or "grid"
  * @returns - Column definitions for the systems table
  */
-export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<SystemRecord>[] {
+export function SystemsTableColumns(viewMode: "table" | "grid", traffic: SystemTrafficById): ColumnDef<SystemRecord>[] {
+	function trafficColumn(direction: "receivedBytes" | "sentBytes") {
+		return {
+			accessorFn: ({ id }: SystemRecord) => {
+				const summary = traffic[id]
+				return summary?.sampleCount && summary.coveredSeconds > 0 ? summary[direction] : undefined
+			},
+			sortUndefined: "last" as const,
+			sortingFn: "basic" as const,
+			size: 0,
+			header: sortableHeader,
+			cell: (info: CellContext<SystemRecord, unknown>) => (
+				<TrafficCell info={info} summary={traffic[info.row.original.id]} />
+			),
+		}
+	}
+
 	return [
 		{
 			// size: 200,
@@ -227,6 +247,18 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 			Icon: GpuIcon,
 			header: sortableHeader,
+		},
+		{
+			id: "trafficIngress",
+			name: () => t`30-day ingress`,
+			Icon: ArrowDownToLineIcon,
+			...trafficColumn("receivedBytes"),
+		},
+		{
+			id: "trafficEgress",
+			name: () => t`30-day egress`,
+			Icon: ArrowUpFromLineIcon,
+			...trafficColumn("sentBytes"),
 		},
 		{
 			id: "loadAverage",
@@ -603,6 +635,37 @@ function sortableHeader(context: HeaderContext<SystemRecord, unknown>) {
 			{name()}
 			{hideSort || <ArrowUpDownIcon className="ms-2 size-4" />}
 		</Button>
+	)
+}
+
+function TrafficCell({ info, summary }: { info: CellContext<SystemRecord, unknown>; summary?: SystemTraffic }) {
+	const bytes = info.getValue() as number | undefined
+	if (bytes === undefined || !summary) {
+		return (
+			<span className="text-muted-foreground" aria-label={t`Unknown`}>
+				—
+			</span>
+		)
+	}
+	const { value, unit } = formatBytes(bytes)
+	// The formatter uses powers of 1024 for byte units.
+	const byteUnit = unit === "B" ? unit : unit.replace("B", "iB")
+	const first = summary.firstSampleAt ? formatShortDate(summary.firstSampleAt) : undefined
+	const last = summary.lastSampleAt ? formatShortDate(summary.lastSampleAt) : undefined
+	return (
+		<Link
+			href={getPagePath($router, "system", { id: info.row.original.id })}
+			tabIndex={-1}
+			className="relative z-10 tabular-nums whitespace-nowrap"
+			title={first && last ? t`Recorded samples: ${first}–${last}` : undefined}
+			data-traffic-bytes={bytes}
+			data-traffic-covered-seconds={summary.coveredSeconds}
+			data-traffic-sample-count={summary.sampleCount}
+			data-traffic-first={summary.firstSampleAt}
+			data-traffic-last={summary.lastSampleAt}
+		>
+			{formatNumber(Number(value.toFixed(2)))} {byteUnit}
+		</Link>
 	)
 }
 

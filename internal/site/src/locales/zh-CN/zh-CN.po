@@ -2736,3 +2736,19 @@ msgstr "可用内存"
 #: src/components/cluster-capacity.tsx
 msgid "{missingMemoryUsage, plural, one {Memory usage unavailable for # system} other {Memory usage unavailable for # systems}}"
 msgstr "{missingMemoryUsage, plural, other {# 台暂无内存用量}}"
+
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "30-day ingress"
+msgstr "30 天入站"
+
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "30-day egress"
+msgstr "30 天出站"
+
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "Recorded samples: {first}–{last}"
+msgstr "采样范围 {first} 至 {last}"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Unable to refresh 30-day traffic."
+msgstr "暂时无法刷新 30 天流量。"
