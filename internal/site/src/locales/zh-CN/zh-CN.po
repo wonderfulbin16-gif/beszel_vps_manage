@@ -1933,6 +1933,11 @@ msgstr "S.M.A.R.T. 详情"
 msgid "S.M.A.R.T. Self-Test"
 msgstr "S.M.A.R.T. 自检"
 
+#: src/components/routes/system/charts/disk-charts.tsx
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "Sandbox file usage"
+msgstr "沙箱文件占用"
+
 #: src/components/network-monitors-table/monitor-dialog.tsx
 msgid "Save {foo}"
 msgstr "保存 {foo}"
@@ -2248,6 +2253,11 @@ msgstr "此操作无法撤销。这将永久删除数据库中{name}的所有当
 #: src/components/routes/settings/alerts-history-data-table.tsx
 msgid "This will permanently delete all selected records from the database."
 msgstr "这将永久删除数据库中所有选定的记录。"
+
+#: src/components/routes/system/charts/disk-charts.tsx
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "Space used by files visible inside the sandbox."
+msgstr "统计沙箱内可见文件所占空间。"
 
 #: src/components/routes/system/charts/disk-charts.tsx
 msgid "Throughput of {extraFsName}"

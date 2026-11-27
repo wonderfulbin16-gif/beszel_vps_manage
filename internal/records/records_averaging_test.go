@@ -22,6 +22,19 @@ func TestAverageSystemStatsSlice_Empty(t *testing.T) {
 	assert.Equal(t, system.Stats{}, result)
 }
 
+func TestAverageSystemStatsSlice_SandboxDisk(t *testing.T) {
+	zero, occupied := 0.0, 4.5
+	legacy := system.Stats{DiskUsed: 600}
+	assert.Nil(t, records.AverageSystemStatsSlice([]system.Stats{legacy}).SandboxDiskUsed)
+	result := records.AverageSystemStatsSlice([]system.Stats{
+		legacy,
+		{SandboxDiskUsed: &zero},
+		{SandboxDiskUsed: &occupied},
+	})
+	require.NotNil(t, result.SandboxDiskUsed)
+	assert.Equal(t, 2.25, *result.SandboxDiskUsed)
+}
+
 func TestAverageSystemStatsSlice_SingleRecord(t *testing.T) {
 	input := []system.Stats{
 		{

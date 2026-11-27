@@ -295,6 +295,8 @@ func AverageSystemStatsSlice(records []system.Stats) system.Stats {
 	fanCount := uint64(0)
 	zfsPoolCounts := make(map[string]uint64)
 	zfsCapacityCounts := make(map[string]uint64)
+	var sandboxDiskSum float64
+	var sandboxDiskCount int
 
 	// Accumulate totals
 	for i := range records {
@@ -324,6 +326,10 @@ func AverageSystemStatsSlice(records []system.Stats) system.Stats {
 		sum.DiskTotal += stats.DiskTotal
 		sum.DiskUsed += stats.DiskUsed
 		sum.DiskPct += stats.DiskPct
+		if stats.SandboxDiskUsed != nil {
+			sandboxDiskSum += *stats.SandboxDiskUsed
+			sandboxDiskCount++
+		}
 		sum.NetworkSent += stats.NetworkSent
 		sum.NetworkRecv += stats.NetworkRecv
 		sum.LoadAvg[0] += stats.LoadAvg[0]
@@ -519,6 +525,10 @@ func AverageSystemStatsSlice(records []system.Stats) system.Stats {
 	sum.DiskTotal = twoDecimals(sum.DiskTotal / count)
 	sum.DiskUsed = twoDecimals(sum.DiskUsed / count)
 	sum.DiskPct = twoDecimals(sum.DiskPct / count)
+	if sandboxDiskCount > 0 {
+		usage := twoDecimals(sandboxDiskSum / float64(sandboxDiskCount))
+		sum.SandboxDiskUsed = &usage
+	}
 	sum.DiskIO[0] = sum.DiskIO[0] / uint64(count)
 	sum.DiskIO[1] = sum.DiskIO[1] / uint64(count)
 	for i := range sum.DiskIoStats {

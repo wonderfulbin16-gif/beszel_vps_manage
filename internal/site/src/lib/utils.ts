@@ -10,6 +10,10 @@ import type { ChartTimeData, FingerprintRecord, SemVer, SystemRecord } from "@/t
 import { HourFormat, Unit } from "./enums"
 import { $copyContent, $userSettings } from "./stores"
 
+export function usesSandboxDiskUsage(info: SystemRecord["info"] | undefined) {
+	return info?.sde ?? typeof info?.sdu === "number"
+}
+
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs))
 }

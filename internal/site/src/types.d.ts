@@ -70,6 +70,10 @@ export interface SystemInfo {
 	mp: number
 	/** disk percent */
 	dp: number
+	/** sandbox file usage collection enabled */
+	sde?: boolean
+	/** sandbox visible file usage (GiB) */
+	sdu?: number
 	/** battery percent and state */
 	bat?: [number, BatteryState]
 	/** bandwidth (mb) */
@@ -137,6 +141,8 @@ export interface SystemStats {
 	d: number
 	/** disk used (gb) */
 	du: number
+	/** sandbox visible file usage (GiB) */
+	sdu?: number
 	/** disk percent */
 	dp: number
 	/** disk I/O bytes [read, write] */

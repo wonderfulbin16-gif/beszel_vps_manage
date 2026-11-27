@@ -1928,6 +1928,11 @@ msgstr "S.M.A.R.T. Details"
 msgid "S.M.A.R.T. Self-Test"
 msgstr "S.M.A.R.T. Self-Test"
 
+#: src/components/routes/system/charts/disk-charts.tsx
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "Sandbox file usage"
+msgstr "Sandbox file usage"
+
 #: src/components/network-monitors-table/monitor-dialog.tsx
 msgid "Save {foo}"
 msgstr "Save {foo}"
@@ -2243,6 +2248,11 @@ msgstr "This action cannot be undone. This will permanently delete all current r
 #: src/components/routes/settings/alerts-history-data-table.tsx
 msgid "This will permanently delete all selected records from the database."
 msgstr "This will permanently delete all selected records from the database."
+
+#: src/components/routes/system/charts/disk-charts.tsx
+#: src/components/systems-table/systems-table-columns.tsx
+msgid "Space used by files visible inside the sandbox."
+msgstr "Space used by files visible inside the sandbox."
 
 #: src/components/routes/system/charts/disk-charts.tsx
 msgid "Throughput of {extraFsName}"

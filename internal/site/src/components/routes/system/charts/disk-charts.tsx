@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro"
 import AreaChartDefault from "@/components/charts/area-chart"
-import { decimalString, formatBytes, toFixedFloat } from "@/lib/utils"
+import { decimalString, formatBytes, toFixedFloat, usesSandboxDiskUsage } from "@/lib/utils"
 import type { SystemStatsRecord } from "@/types"
 import { ChartCard, SelectAvgMax } from "../chart-card"
 import { Unit } from "@/lib/enums"
@@ -104,11 +104,45 @@ export const diskDataFns = {
 }
 
 export function RootDiskCharts({ systemData }: { systemData: SystemData }) {
+	if (usesSandboxDiskUsage(systemData.system.info)) {
+		return <SandboxDiskUsageChart systemData={systemData} />
+	}
 	return (
 		<>
 			<DiskUsageChart systemData={systemData} />
 			<DiskIOChart systemData={systemData} />
 		</>
+	)
+}
+
+function SandboxDiskUsageChart({ systemData }: { systemData: SystemData }) {
+	const { chartData, grid, dataEmpty, system } = systemData
+	const title = t`Sandbox file usage`
+	const current = system.info.sdu
+	return (
+		<ChartCard
+			empty={dataEmpty}
+			grid={grid}
+			title={title}
+			description={t`Space used by files visible inside the sandbox.`}
+			cornerEl={
+				current == null ? null : <span className="text-sm tabular-nums font-medium">{decimalString(current)} GiB</span>
+			}
+		>
+			<AreaChartDefault
+				chartData={chartData}
+				tickFormatter={(value) => `${toFixedFloat(value, 2)} GiB`}
+				contentFormatter={({ value }) => `${decimalString(value)} GiB`}
+				dataPoints={[
+					{
+						label: title,
+						color: 4,
+						opacity: 0.4,
+						dataKey: ({ stats }: SystemStatsRecord) => stats?.sdu ?? null,
+					},
+				]}
+			/>
+		</ChartCard>
 	)
 }
 

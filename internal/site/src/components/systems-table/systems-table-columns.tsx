@@ -22,7 +22,15 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { BatteryState, ConnectionType, connectionTypeLabels, MeterState, SystemStatus } from "@/lib/enums"
 import { $userSettings } from "@/lib/stores"
-import { cn, decimalString, formatBytes, formatTemperature, parseSemVer, secondsToUptimeString } from "@/lib/utils"
+import {
+	cn,
+	decimalString,
+	formatBytes,
+	formatTemperature,
+	parseSemVer,
+	secondsToUptimeString,
+	usesSandboxDiskUsage,
+} from "@/lib/utils"
 import { batteryStateTranslations } from "@/lib/i18n"
 import { connectedWiFi, primaryWiFi, primaryWiFiSignal, wifiNetworkName, wifiSignalState } from "@/lib/wifi"
 import type { SystemRecord, WiFi } from "@/types"
@@ -186,11 +194,21 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			header: sortableHeader,
 		},
 		{
-			accessorFn: ({ info }) => info.dp || undefined,
+			accessorFn: ({ info }) => (usesSandboxDiskUsage(info) ? (info.sdu ?? undefined) : info.dp || undefined),
 			id: "disk",
 			name: () => t`Disk`,
-			cell: (info: CellContext<SystemRecord, unknown>) =>
-				info.row.original.info.efs ? DiskCellWithMultiple(info) : TableCellWithMeter(info),
+			sortingFn: (a, b, id) => {
+				// Keep GiB and percentage rows in separate groups.
+				const groupOrder = Number(usesSandboxDiskUsage(a.original.info)) - Number(usesSandboxDiskUsage(b.original.info))
+				return groupOrder || a.getValue<number>(id) - b.getValue<number>(id)
+			},
+			cell: (info: CellContext<SystemRecord, unknown>) => {
+				const system = info.row.original
+				if (usesSandboxDiskUsage(system.info)) {
+					return <SandboxDiskCell system={system} />
+				}
+				return system.info.efs ? <DiskCellWithMultiple {...info} /> : <TableCellWithMeter {...info} />
+			},
 			Icon: HardDriveIcon,
 			header: sortableHeader,
 		},
@@ -604,6 +622,29 @@ function TableCellWithMeter(info: CellContext<SystemRecord, unknown>) {
 				<span className={meterClass} style={{ width: `${val}%` }}></span>
 			</span>
 		</div>
+	)
+}
+
+function SandboxDiskCell({ system }: { system: SystemRecord }) {
+	const value = system.info.sdu
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Link
+					href={getPagePath($router, "system", { id: system.id })}
+					tabIndex={-1}
+					className="relative z-10 whitespace-nowrap tabular-nums"
+				>
+					<span className="sr-only">
+						<Trans>Sandbox file usage</Trans>{" "}
+					</span>
+					{value == null ? <span className="text-muted-foreground">—</span> : `${decimalString(value)} GiB`}
+				</Link>
+			</TooltipTrigger>
+			<TooltipContent>
+				<Trans>Space used by files visible inside the sandbox.</Trans>
+			</TooltipContent>
+		</Tooltip>
 	)
 }
 

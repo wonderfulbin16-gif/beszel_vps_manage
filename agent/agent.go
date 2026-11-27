@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,7 @@ type Agent struct {
 	diskBaseline              map[string]prevDisk                                   // Latest disk I/O counters of any interval, seeds a new interval
 	diskUsageCacheDuration    time.Duration                                         // How long to cache disk usage (to avoid waking sleeping disks)
 	lastDiskUsageUpdate       time.Time                                             // Last time disk usage was collected
+	sandboxDisk               *sandboxDiskSampler                                   // Background measurement of visible files in a sandbox
 	netInterfaces             map[string]bool                                       // Valid network interfaces; true if byte counters come from MAC stats (Jetson nvethernet)
 	netIoStats                map[uint16]system.NetIoStats                          // Keeps track of bandwidth usage per cache interval
 	netInterfaceDeltaTrackers map[uint16]*deltatracker.DeltaTracker[string, uint64] // Per-cache-time NIC delta trackers
@@ -100,6 +102,10 @@ func NewAgent(dataDir ...string) (agent *Agent, err error) {
 		} else {
 			slog.Warn("Invalid DISK_USAGE_CACHE", "err", err)
 		}
+	}
+
+	if enabled, _ := utils.GetEnv("SANDBOX_DISK_USAGE"); runtime.GOOS == "linux" && enabled == "true" {
+		agent.sandboxDisk = &sandboxDiskSampler{}
 	}
 
 	// Set up slog with a log level determined by the LOG_LEVEL env var
@@ -291,6 +297,19 @@ func (a *Agent) gatherStats(options common.DataRequestOptions) *system.CombinedD
 // Start initializes and starts the agent with optional WebSocket connection.
 // It runs until ctx is cancelled or the process receives SIGINT or SIGTERM.
 func (a *Agent) Start(ctx context.Context, serverOptions ServerOptions) error {
+	if a.sandboxDisk != nil {
+		sampleCtx, cancel := context.WithCancel(ctx)
+		stopped := make(chan struct{})
+		defer func() {
+			cancel()
+			<-stopped
+		}()
+		slog.Info("Sandbox disk usage collection enabled")
+		go func() {
+			defer close(stopped)
+			a.sandboxDisk.run(sampleCtx)
+		}()
+	}
 	a.keys = serverOptions.Keys
 	err := a.connectionManager.Start(ctx, serverOptions)
 	if err != nil {
