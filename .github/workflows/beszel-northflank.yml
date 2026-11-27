@@ -1,0 +1,101 @@
+name: Publish Beszel to Northflank
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the built image to Northflank
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: beszel-northflank-production
+  cancel-in-progress: false
+
+env:
+  NORTHFLANK_REGISTRY: registry.northflank.com
+  NORTHFLANK_PROJECT: default
+  NORTHFLANK_IMAGE: beszel-hub-actions
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build Linux amd64 image
+        run: |
+          docker buildx build --platform linux/amd64 --load --provenance=false \
+            --file Dockerfile.northflank \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "beszel-ci:$GITHUB_SHA" .
+
+      - name: Publish and verify project image
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NORTHFLANK_REGISTRY_USERNAME: ${{ vars.NORTHFLANK_REGISTRY_USERNAME }}
+          NORTHFLANK_IMAGE_PUSH_TOKEN: ${{ secrets.NORTHFLANK_IMAGE_PUSH_TOKEN }}
+        run: |
+          if [[ -z "$NORTHFLANK_REGISTRY_USERNAME" || -z "$NORTHFLANK_IMAGE_PUSH_TOKEN" ]]; then
+            echo '::error::Set NORTHFLANK_REGISTRY_USERNAME and NORTHFLANK_IMAGE_PUSH_TOKEN to enable publishing.'
+            exit 1
+          fi
+
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo 'This commit is no longer the tip of main. The image was not published.'
+            exit 0
+          fi
+
+          # Northflank resolves "Latest" to the newest Ready version. Tags are immutable.
+          tag="sha-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          image="$NORTHFLANK_REGISTRY/$NORTHFLANK_PROJECT/$NORTHFLANK_IMAGE:$tag"
+          printf '%s\n' "$NORTHFLANK_IMAGE_PUSH_TOKEN" | docker login "$NORTHFLANK_REGISTRY" \
+            --username "$NORTHFLANK_REGISTRY_USERNAME" --password-stdin
+          trap 'docker logout "$NORTHFLANK_REGISTRY" >/dev/null 2>&1 || true' EXIT
+          docker image tag "beszel-ci:$GITHUB_SHA" "$image"
+          docker image push "$image"
+
+          # Hold the workflow's concurrency slot until Northflank validates the image.
+          for ((attempt = 1; attempt <= 60; attempt++)); do
+            response=$(printf 'Authorization: Bearer %s\n' "$NORTHFLANK_IMAGE_PUSH_TOKEN" | \
+              curl --fail --silent --show-error --max-time 15 --retry 2 --header @- \
+                --get --data-urlencode "nameSearch=$NORTHFLANK_IMAGE" \
+                --data-urlencode "tagSearch=$tag" \
+                "https://api.northflank.com/v1/projects/$NORTHFLANK_PROJECT/images")
+            status=$(jq -r --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" \
+              'first(.data.images[]? | select(.name == $name and .tag == $tag) | .status) // ""' \
+              <<< "$response")
+
+            case "$status" in
+              READY)
+                printf 'Northflank image ready: `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+                ;;
+              FAILURE|EXPIRED)
+                echo "::error::Northflank reported $status for $image."
+                exit 1
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          echo "::error::Timed out waiting for Northflank to validate $image."
+          exit 1
