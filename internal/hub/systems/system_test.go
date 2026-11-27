@@ -308,3 +308,40 @@ func TestCreateRecordsSavesCpuSockets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, record.GetInt("sockets"))
 }
+
+func TestCreateRecordsSavesMeasuredMemoryUsage(t *testing.T) {
+	const gib = 1 << 30
+	sys, _ := newTestSystemWithHub(t)
+	for _, tc := range []struct {
+		name       string
+		scoped     bool
+		limit      uint64
+		statsTotal uint64
+		used       uint64
+		known      bool
+	}{
+		{"host sample", false, 0, 8 * gib, 3 * gib, true},
+		{"zero usage", false, 0, 8 * gib, 0, true},
+		{"missing sample", false, 0, 0, 0, false},
+		{"scoped sample", true, 4 * gib, 4 * gib, gib, true},
+		{"host sample for scoped system", true, 4 * gib, 64 * gib, 16 * gib, false},
+		{"unknown scope limit", true, 0, 64 * gib, 16 * gib, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			record, err := sys.createRecords(&system.CombinedData{
+				Info:  system.Info{CapacityScoped: tc.scoped, MemoryCapacity: tc.limit},
+				Stats: system.Stats{MemBytes: [4]uint64{tc.statsTotal, tc.used}},
+			})
+			require.NoError(t, err)
+			var info struct {
+				MemUsedBytes *uint64 `json:"mub"`
+			}
+			require.NoError(t, record.UnmarshalJSONField("info", &info))
+			if tc.known {
+				require.Equal(t, &tc.used, info.MemUsedBytes)
+			} else {
+				require.Nil(t, info.MemUsedBytes)
+			}
+		})
+	}
+}

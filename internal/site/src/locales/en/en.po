@@ -2723,3 +2723,11 @@ msgstr "Systems refreshed"
 #: src/components/cluster-capacity.tsx
 msgid "Unable to save capacity settings. Try again."
 msgstr "Unable to save capacity settings. Try again."
+
+#: src/components/cluster-capacity.tsx
+msgid "Available memory"
+msgstr "Available memory"
+
+#: src/components/cluster-capacity.tsx
+msgid "{missingMemoryUsage, plural, one {Memory usage unavailable for # system} other {Memory usage unavailable for # systems}}"
+msgstr "{missingMemoryUsage, plural, one {Memory usage unavailable for # system} other {Memory usage unavailable for # systems}}"

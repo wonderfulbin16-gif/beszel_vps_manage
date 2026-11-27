@@ -341,7 +341,8 @@ func (sys *System) createRecords(data *system.CombinedData) (*core.Record, error
 		// Distinguish an idle GPU from a system without GPU data (#2312)
 		info := struct {
 			system.Info
-			GpuPct *float64 `json:"g,omitempty"`
+			GpuPct       *float64 `json:"g,omitempty"`
+			MemUsedBytes *uint64  `json:"mub,omitempty"`
 		}{Info: data.Info}
 		if len(data.Stats.GPUData) > 0 {
 			info.GpuPct = &data.Info.GpuPct
@@ -351,6 +352,11 @@ func (sys *System) createRecords(data *system.CombinedData) (*core.Record, error
 		capacity := system.ReportedCapacity(previousCapacity, systemRecord.GetString("host"), systemRecord.GetString("ip"), data.Info, data.Stats, data.Details)
 		if capacity != previousCapacity {
 			systemRecord.Set("capacity", capacity)
+		}
+		// A scoped agent can fall back to host metrics if it cannot read the cgroup.
+		if sampleTotal := data.Stats.MemBytes[0]; capacity.Memory > 0 && sampleTotal > 0 &&
+			(!data.Info.CapacityScoped || sampleTotal <= data.Info.MemoryCapacity) {
+			info.MemUsedBytes = &data.Stats.MemBytes[1]
 		}
 		systemRecord.Set("info", info)
 		if err := txApp.SaveNoValidate(systemRecord); err != nil {

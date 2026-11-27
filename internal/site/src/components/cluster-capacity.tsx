@@ -110,6 +110,8 @@ export function ClusterCapacity({ systems }: { systems: readonly SystemRecord[] 
 
 function CapacityTotals({ summary, labels }: { summary: ReturnType<typeof summarizeCapacity>; labels: Labels }) {
 	const { t } = useLingui()
+	const { availableMemory } = summary
+	const missingMemoryUsage = summary.included - availableMemory.known
 	return (
 		<dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
 			{capacityMetrics.map((key) => {
@@ -125,18 +127,42 @@ function CapacityTotals({ summary, labels }: { summary: ReturnType<typeof summar
 							<Icon className="size-3.5" aria-hidden="true" />
 							{labels[key]}
 						</dt>
-						<dd className="text-lg font-semibold tabular-nums wrap-anywhere">
-							{known ? (
-								<>
-									{formatNumber(total)} <span className="text-sm font-normal text-muted-foreground">{units[key]}</span>
-								</>
-							) : (
-								<span aria-label={t`Unknown`}>—</span>
+						<dd className="flex flex-wrap items-baseline gap-x-3 gap-y-1 wrap-anywhere tabular-nums">
+							<span className="text-lg font-semibold">
+								{known ? (
+									<>
+										{formatNumber(total)}{" "}
+										<span className="text-sm font-normal text-muted-foreground">{units[key]}</span>
+									</>
+								) : (
+									<span aria-label={t`Unknown`}>—</span>
+								)}
+							</span>
+							{key === "memory" && (
+								<span className="text-sm text-muted-foreground">
+									<Trans>Available memory</Trans>{" "}
+									<span className="font-medium text-foreground">
+										{availableMemory.known ? (
+											`${formatNumber(availableMemory.total)} ${units.memory}`
+										) : (
+											<span aria-label={t`Unknown`}>—</span>
+										)}
+									</span>
+								</span>
 							)}
 						</dd>
 						{missing > 0 && (
 							<dd className="text-xs text-muted-foreground">
 								<Plural value={missing} one="Missing data for # system" other="Missing data for # systems" />
+							</dd>
+						)}
+						{key === "memory" && missingMemoryUsage > 0 && (
+							<dd className="text-xs text-muted-foreground">
+								<Plural
+									value={missingMemoryUsage}
+									one="Memory usage unavailable for # system"
+									other="Memory usage unavailable for # systems"
+								/>
 							</dd>
 						)}
 					</div>

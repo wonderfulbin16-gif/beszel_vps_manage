@@ -2682,3 +2682,11 @@ msgstr "已重新整理用戶端"
 #: src/components/cluster-capacity.tsx
 msgid "Unable to save capacity settings. Try again."
 msgstr "無法儲存資源設定。請再試一次。"
+
+#: src/components/cluster-capacity.tsx
+msgid "Available memory"
+msgstr "可用記憶體"
+
+#: src/components/cluster-capacity.tsx
+msgid "{missingMemoryUsage, plural, one {Memory usage unavailable for # system} other {Memory usage unavailable for # systems}}"
+msgstr "{missingMemoryUsage, plural, other {# 台裝置暫無記憶體用量}}"

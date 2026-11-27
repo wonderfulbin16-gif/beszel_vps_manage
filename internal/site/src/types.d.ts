@@ -79,6 +79,8 @@ export interface SystemInfo {
 	u: number
 	/** memory percent */
 	mp: number
+	/** used memory in bytes from the latest capacity-scoped sample */
+	mub?: number
 	/** disk percent */
 	dp: number
 	/** sandbox file usage collection enabled */

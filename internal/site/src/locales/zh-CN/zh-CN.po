@@ -2728,3 +2728,11 @@ msgstr "已刷新客户端"
 #: src/components/cluster-capacity.tsx
 msgid "Unable to save capacity settings. Try again."
 msgstr "无法保存资源配置。请重试。"
+
+#: src/components/cluster-capacity.tsx
+msgid "Available memory"
+msgstr "可用内存"
+
+#: src/components/cluster-capacity.tsx
+msgid "{missingMemoryUsage, plural, one {Memory usage unavailable for # system} other {Memory usage unavailable for # systems}}"
+msgstr "{missingMemoryUsage, plural, other {# 台暂无内存用量}}"
