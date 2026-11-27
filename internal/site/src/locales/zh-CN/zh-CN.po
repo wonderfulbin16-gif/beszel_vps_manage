@@ -2764,3 +2764,7 @@ msgstr "下移 {name}"
 #: src/components/systems-table/systems-table.tsx
 msgid "Reset column order"
 msgstr "恢复默认顺序"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Drag {name} to reorder"
+msgstr "拖动 {name} 调整顺序"

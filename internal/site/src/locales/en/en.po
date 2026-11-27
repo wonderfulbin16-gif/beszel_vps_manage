@@ -2759,3 +2759,7 @@ msgstr "Move {name} down"
 #: src/components/systems-table/systems-table.tsx
 msgid "Reset column order"
 msgstr "Reset column order"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Drag {name} to reorder"
+msgstr "Drag {name} to reorder"

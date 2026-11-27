@@ -24,6 +24,7 @@ import {
 	ArrowUpIcon,
 	EyeIcon,
 	FilterIcon,
+	GripVerticalIcon,
 	LayoutGridIcon,
 	LayoutListIcon,
 	LoaderCircleIcon,
@@ -63,7 +64,7 @@ import {
 	$userSettings,
 } from "@/lib/stores"
 import { refresh } from "@/lib/systemsManager"
-import { moveSystemColumn, normalizeSystemColumnOrder } from "@/lib/system-column-order"
+import { moveSystemColumn, normalizeSystemColumnOrder, placeSystemColumn } from "@/lib/system-column-order"
 import { EMPTY_SYSTEM_TRAFFIC, getSystemTraffic } from "@/lib/system-traffic"
 import { cn, runOnce } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
@@ -72,6 +73,7 @@ import { $router, Link } from "../router"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { ActionsButton } from "../system-actions-button"
 import { SystemsTableColumns, IndicatorDot } from "./systems-table-columns"
+import { useColumnDrag } from "./use-column-drag"
 
 type ViewMode = "table" | "grid"
 type StatusFilter = "all" | SystemRecord["status"]
@@ -308,6 +310,13 @@ export default function SystemsTable() {
 		},
 		[columnOrder, saveColumnOrder]
 	)
+	const placeColumn = useCallback(
+		(source: string, target: string, side: "before" | "after", visible: readonly string[]) => {
+			const next = placeSystemColumn(columnOrder, source, target, side, visible)
+			if (next.some((id, index) => id !== columnOrder[index])) saveColumnOrder(next)
+		},
+		[columnOrder, saveColumnOrder]
+	)
 	const isDefaultColumnOrder = columnOrder.every((id, index) => id === defaultColumnOrder[index])
 
 	const [upSystemsLength, downSystemsLength, pausedSystemsLength] = useMemo(() => {
@@ -453,6 +462,7 @@ export default function SystemsTable() {
 									<VisibleColumnsMenu
 										columns={movableColumns}
 										moveColumn={moveColumn}
+										placeColumn={placeColumn}
 										reset={() => saveColumnOrder([])}
 										isDefault={isDefaultColumnOrder}
 									/>
@@ -468,6 +478,7 @@ export default function SystemsTable() {
 		columns,
 		movableColumns,
 		moveColumn,
+		placeColumn,
 		saveColumnOrder,
 		isDefaultColumnOrder,
 		sorting,
@@ -535,16 +546,19 @@ export default function SystemsTable() {
 function VisibleColumnsMenu({
 	columns,
 	moveColumn,
+	placeColumn,
 	reset,
 	isDefault,
 }: {
 	columns: Column<SystemRecord>[]
 	moveColumn: (id: string, direction: -1 | 1, visible: readonly string[]) => void
+	placeColumn: (source: string, target: string, side: "before" | "after", visible: readonly string[]) => void
 	reset: () => void
 	isDefault: boolean
 }) {
 	const { t } = useLingui()
 	const visible = columns.filter((column) => column.getIsVisible()).map(({ id }) => id)
+	const drag = useColumnDrag((source, target) => placeColumn(source, target.id, target.side, visible))
 	return (
 		<div className="min-w-44">
 			<DropdownMenuLabel className="pt-2 px-3.5 flex items-center gap-2">
@@ -552,7 +566,14 @@ function VisibleColumnsMenu({
 				<Trans>Visible Fields</Trans>
 			</DropdownMenuLabel>
 			<DropdownMenuSeparator />
-			<div className="px-1.5 pb-1">
+			<div
+				ref={drag.list}
+				className="px-1.5 pb-1"
+				onPointerMove={drag.move}
+				onPointerUp={drag.finish}
+				onPointerCancel={drag.cancel}
+				onLostPointerCapture={drag.cancel}
+			>
 				{columns.map((column) => {
 					const { id } = column
 					// @ts-expect-error column definitions include a translated menu name
@@ -560,8 +581,34 @@ function VisibleColumnsMenu({
 					const position = visible.indexOf(id)
 					const up = t`Move ${name} up`
 					const down = t`Move ${name} down`
+					const gripLabel = t`Drag ${name} to reorder`
+					const dropSide = drag.target?.id === id ? drag.target.side : undefined
 					return (
-						<div key={id} className="flex items-center">
+						<div
+							key={id}
+							data-column-drop-id={position >= 0 ? id : undefined}
+							className={cn(
+								"relative flex items-center",
+								drag.source === id && "opacity-50",
+								dropSide && "after:pointer-events-none after:absolute after:inset-x-1 after:h-0.5 after:rounded-full after:bg-primary",
+								dropSide === "before" && "after:top-0",
+								dropSide === "after" && "after:bottom-0"
+							)}
+						>
+							<button
+								type="button"
+								tabIndex={-1}
+								aria-label={gripLabel}
+								title={gripLabel}
+								disabled={position < 0 || visible.length < 2}
+								className={cn(
+									"flex size-7 shrink-0 touch-none cursor-grab select-none items-center justify-center rounded-sm text-muted-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-25",
+									drag.source === id && "cursor-grabbing"
+								)}
+								onPointerDown={(event) => drag.start(event, id)}
+							>
+								<GripVerticalIcon className="size-3.5" aria-hidden="true" />
+							</button>
 							<DropdownMenuCheckboxItem
 								className="min-w-0 flex-1 pe-1"
 								onSelect={(event) => event.preventDefault()}

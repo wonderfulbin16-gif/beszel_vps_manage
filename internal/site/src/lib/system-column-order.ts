@@ -43,3 +43,26 @@ export function moveSystemColumn(
 	nextOrder[destination] = id
 	return nextOrder
 }
+
+export function placeSystemColumn(
+	order: readonly string[],
+	source: string,
+	target: string,
+	side: "before" | "after",
+	visible: readonly string[] = order
+): string[] {
+	if (source === target) return [...order]
+
+	const movable = new Set(visible)
+	movable.delete(systemColumnId)
+	const visibleOrder = order.filter((id) => movable.has(id))
+	const sourceIndex = visibleOrder.indexOf(source)
+	if (sourceIndex < 0 || !visibleOrder.includes(target)) return [...order]
+
+	visibleOrder.splice(sourceIndex, 1)
+	const targetIndex = visibleOrder.indexOf(target)
+	visibleOrder.splice(targetIndex + (side === "after" ? 1 : 0), 0, source)
+
+	let nextVisibleIndex = 0
+	return order.map((id) => (movable.has(id) ? visibleOrder[nextVisibleIndex++] : id))
+}

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { moveSystemColumn, normalizeSystemColumnOrder } from "../src/lib/system-column-order"
+import { moveSystemColumn, normalizeSystemColumnOrder, placeSystemColumn } from "../src/lib/system-column-order"
 
 const defaults = ["system", "ip", "cpu", "memory", "trafficIngress", "trafficEgress", "actions"]
 
@@ -39,4 +39,40 @@ test("moves only visible columns and keeps hidden columns in their original posi
 	expect(moveSystemColumn(order, "memory", -1, visible)).toEqual(["system", "memory", "ip", "cpu", "actions"])
 	expect(moveSystemColumn(order, "cpu", 1, visible)).toEqual(["system", "memory", "ip", "cpu", "actions"])
 	expect(moveSystemColumn(order, "ip", -1, visible)).toEqual(order)
+})
+
+test("inserts a dragged column next to its target and preserves hidden positions", () => {
+	const order = Object.freeze(["system", "ip", "cpu", "disk", "memory", "actions", "traffic"])
+	const visible = ["system", "ip", "cpu", "memory", "actions", "traffic"]
+	expect(placeSystemColumn(order, "ip", "actions", "after", visible)).toEqual([
+		"system",
+		"cpu",
+		"memory",
+		"disk",
+		"actions",
+		"ip",
+		"traffic",
+	])
+	expect(placeSystemColumn(order, "traffic", "cpu", "before", visible)).toEqual([
+		"system",
+		"ip",
+		"traffic",
+		"disk",
+		"cpu",
+		"memory",
+		"actions",
+	])
+	expect(order).toEqual(["system", "ip", "cpu", "disk", "memory", "actions", "traffic"])
+})
+
+test("ignores drops on pinned, hidden, missing, and unchanged positions", () => {
+	const order = ["system", "ip", "disk", "cpu"]
+	const visible = ["system", "ip", "cpu"]
+	expect(placeSystemColumn(order, "system", "ip", "after")).toEqual(order)
+	expect(placeSystemColumn(order, "cpu", "system", "before")).toEqual(order)
+	expect(placeSystemColumn(order, "ip", "ip", "after", visible)).toEqual(order)
+	expect(placeSystemColumn(order, "ip", "cpu", "before", visible)).toEqual(order)
+	expect(placeSystemColumn(order, "ip", "disk", "after", visible)).toEqual(order)
+	expect(placeSystemColumn(order, "disk", "cpu", "after", visible)).toEqual(order)
+	expect(placeSystemColumn(order, "cpu", "removed", "after", visible)).toEqual(order)
 })
