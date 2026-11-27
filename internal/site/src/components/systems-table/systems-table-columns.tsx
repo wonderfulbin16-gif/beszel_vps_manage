@@ -20,12 +20,14 @@ import {
 	WifiIcon,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
+import { availableMemoryGiB, type CapacityMetric, effectiveCapacity } from "@/lib/cluster-capacity"
 import { BatteryState, ConnectionType, connectionTypeLabels, MeterState, SystemStatus } from "@/lib/enums"
 import { $userSettings } from "@/lib/stores"
 import {
 	cn,
 	decimalString,
 	formatBytes,
+	formatNumber,
 	formatTemperature,
 	parseSemVer,
 	secondsToUptimeString,
@@ -180,7 +182,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			accessorFn: ({ info }) => info.cpu || undefined,
 			id: "cpu",
 			name: () => t`CPU`,
-			cell: TableCellWithMeter,
+			cell: (info) => <ResourceCell info={info} metric="cpu" />,
 			Icon: CpuIcon,
 			header: sortableHeader,
 		},
@@ -189,7 +191,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			accessorFn: ({ info }) => info.mp || undefined,
 			id: "memory",
 			name: () => t`Memory`,
-			cell: TableCellWithMeter,
+			cell: (info) => <ResourceCell info={info} metric="memory" />,
 			Icon: MemoryStickIcon,
 			header: sortableHeader,
 		},
@@ -202,13 +204,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 				const groupOrder = Number(usesSandboxDiskUsage(a.original.info)) - Number(usesSandboxDiskUsage(b.original.info))
 				return groupOrder || a.getValue<number>(id) - b.getValue<number>(id)
 			},
-			cell: (info: CellContext<SystemRecord, unknown>) => {
-				const system = info.row.original
-				if (usesSandboxDiskUsage(system.info)) {
-					return <SandboxDiskCell system={system} />
-				}
-				return system.info.efs ? <DiskCellWithMultiple {...info} /> : <TableCellWithMeter {...info} />
-			},
+			cell: (info) => <ResourceCell info={info} metric="disk" />,
 			Icon: HardDriveIcon,
 			header: sortableHeader,
 		},
@@ -601,6 +597,47 @@ function sortableHeader(context: HeaderContext<SystemRecord, unknown>) {
 			{name()}
 			{hideSort || <ArrowUpDownIcon className="ms-2 size-4" />}
 		</Button>
+	)
+}
+
+function ResourceCell({ info, metric }: { info: CellContext<SystemRecord, unknown>; metric: CapacityMetric }) {
+	const system = info.row.original
+	const capacity = effectiveCapacity(system, metric)
+	const available = metric === "memory" ? availableMemoryGiB(system, capacity) : undefined
+	let usage = <TableCellWithMeter {...info} />
+	if (metric === "disk") {
+		if (usesSandboxDiskUsage(system.info)) usage = <SandboxDiskCell system={system} />
+		else if (system.info.efs) usage = <DiskCellWithMultiple {...info} />
+	}
+	return (
+		<div className="grid w-full min-w-0 gap-0.5 py-1">
+			{usage}
+			<div className="text-xs leading-tight whitespace-normal text-muted-foreground tabular-nums">
+				{available !== undefined && capacity !== undefined ? (
+					<>
+						<Trans>Available</Trans>{" "}
+						<span className="whitespace-nowrap">
+							{formatNumber(available)} / {formatNumber(capacity)} GiB
+						</span>
+					</>
+				) : (
+					<>
+						{metric !== "cpu" && (
+							<>
+								<Trans>Capacity</Trans>{" "}
+							</>
+						)}
+						{capacity === undefined ? (
+							<span title={t`Unknown`}>—</span>
+						) : (
+							<span className="whitespace-nowrap">
+								{formatNumber(capacity)} {metric === "cpu" ? "vCPU" : "GiB"}
+							</span>
+						)}
+					</>
+				)}
+			</div>
+		</div>
 	)
 }
 

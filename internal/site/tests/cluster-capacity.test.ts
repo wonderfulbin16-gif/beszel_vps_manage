@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { summarizeCapacity } from "../src/lib/cluster-capacity"
+import { availableMemoryGiB, effectiveCapacity, summarizeCapacity } from "../src/lib/cluster-capacity"
 import type { SystemRecord } from "../src/types"
 
 test("combines detected capacities and per-field overrides for included systems", () => {
@@ -48,4 +48,21 @@ test("sums available memory using actual bytes used and each included system's c
 		{ status: "up", capacity: { memory: 8 }, info: { mub: 0 }, cluster_excluded: true },
 	] as SystemRecord[]
 	expect(summarizeCapacity(systems).availableMemory).toEqual({ total: 7, known: 3 })
+})
+
+test("keeps individual capacity and live memory readable for systems excluded from totals", () => {
+	const system = {
+		status: "up",
+		cluster_excluded: true,
+		capacity: { cpu: 1.25, memory: 4.4 },
+		capacity_override: { memory: 4, disk: 40 },
+		info: { mub: 2 ** 30 },
+	} as SystemRecord
+	const memory = effectiveCapacity(system, "memory")
+	expect(effectiveCapacity(system, "cpu")).toBe(1.25)
+	expect(effectiveCapacity(system, "disk")).toBe(40)
+	expect(memory).toBe(4)
+	expect(availableMemoryGiB(system, memory)).toBe(3)
+	expect(availableMemoryGiB({ ...system, status: "down" }, memory)).toBeUndefined()
+	expect(effectiveCapacity({ ...system, capacity_override: {} }, "disk")).toBeUndefined()
 })

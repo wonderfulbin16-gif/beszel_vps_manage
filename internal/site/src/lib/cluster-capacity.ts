@@ -8,6 +8,24 @@ export function validCapacity(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
 }
 
+export function effectiveCapacity(system: SystemRecord, metric: CapacityMetric) {
+	return validCapacity(system.capacity_override?.[metric]) ?? validCapacity(system.capacity?.[metric])
+}
+
+export function availableMemoryGiB(system: SystemRecord, total: number | undefined) {
+	const usedBytes = system.info?.mub
+	if (
+		total === undefined ||
+		system.status !== SystemStatus.Up ||
+		typeof usedBytes !== "number" ||
+		!Number.isFinite(usedBytes) ||
+		usedBytes < 0
+	) {
+		return undefined
+	}
+	return Math.max(0, total - usedBytes / 2 ** 30)
+}
+
 export function summarizeCapacity(systems: readonly SystemRecord[]) {
 	const metrics = {
 		cpu: { total: 0, known: 0 },
@@ -20,14 +38,14 @@ export function summarizeCapacity(systems: readonly SystemRecord[]) {
 		if (system.cluster_excluded) continue
 		included++
 		for (const metric of capacityMetrics) {
-			const value = validCapacity(system.capacity_override?.[metric]) ?? validCapacity(system.capacity?.[metric])
+			const value = effectiveCapacity(system, metric)
 			if (value === undefined) continue
 			metrics[metric].total += value
 			metrics[metric].known++
-			if (metric === "memory" && system.status === SystemStatus.Up) {
-				const usedBytes = system.info?.mub
-				if (typeof usedBytes === "number" && Number.isFinite(usedBytes) && usedBytes >= 0) {
-					availableMemory.total += Math.max(0, value - usedBytes / 2 ** 30)
+			if (metric === "memory") {
+				const available = availableMemoryGiB(system, value)
+				if (available !== undefined) {
+					availableMemory.total += available
 					availableMemory.known++
 				}
 			}
