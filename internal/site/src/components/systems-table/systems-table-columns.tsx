@@ -60,6 +60,12 @@ const STATUS_COLORS = {
 	[SystemStatus.Pending]: "bg-yellow-500",
 } as const
 
+const RESOURCE_VALUE_COLORS = {
+	cpu: "text-blue-700 dark:text-blue-300",
+	memory: "text-teal-700 dark:text-teal-300",
+	disk: "text-amber-800 dark:text-amber-300",
+}
+
 /** Rank of the updates dot color for sorting: 2 security (red), 1 regular (yellow), 0 up to date (green), -1 no data */
 function getUpdatesRank(pu: SystemRecord["info"]["pu"]): number {
 	if (!pu) {
@@ -604,6 +610,7 @@ function ResourceCell({ info, metric }: { info: CellContext<SystemRecord, unknow
 	const system = info.row.original
 	const capacity = effectiveCapacity(system, metric)
 	const available = metric === "memory" ? availableMemoryGiB(system, capacity) : undefined
+	const valueClass = cn("font-semibold whitespace-nowrap", RESOURCE_VALUE_COLORS[metric])
 	let usage = <TableCellWithMeter {...info} />
 	if (metric === "disk") {
 		if (usesSandboxDiskUsage(system.info)) usage = <SandboxDiskCell system={system} />
@@ -616,7 +623,7 @@ function ResourceCell({ info, metric }: { info: CellContext<SystemRecord, unknow
 				{available !== undefined && capacity !== undefined ? (
 					<>
 						<Trans>Available</Trans>{" "}
-						<span className="whitespace-nowrap">
+						<span className={valueClass}>
 							{formatNumber(available)} / {formatNumber(capacity)} GiB
 						</span>
 					</>
@@ -630,7 +637,7 @@ function ResourceCell({ info, metric }: { info: CellContext<SystemRecord, unknow
 						{capacity === undefined ? (
 							<span title={t`Unknown`}>—</span>
 						) : (
-							<span className="whitespace-nowrap">
+							<span className={valueClass}>
 								{formatNumber(capacity)} {metric === "cpu" ? "vCPU" : "GiB"}
 							</span>
 						)}
