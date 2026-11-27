@@ -2626,3 +2626,31 @@ msgstr "是"
 #: src/components/routes/settings/layout.tsx
 msgid "Your user settings have been updated."
 msgstr "您的用户设置已更新。"
+
+#: src/components/add-system.tsx
+msgid "Altare / Sandbox"
+msgstr "Altare / 沙箱"
+
+#: src/components/add-system.tsx
+msgid "For Altare and other Linux sandboxes without systemd. Save the system, then paste the installation command into its terminal. The agent connects to the hub over WebSocket."
+msgstr "适用于 Altare 和其他没有 systemd 的 Linux 沙箱。保存系统后，把安装命令粘贴到沙箱终端执行。Agent 会通过 WebSocket 主动连接 Hub。"
+
+#: src/components/add-system.tsx
+msgid "Copy Sandbox Install Command"
+msgstr "复制沙箱安装命令"
+
+#: src/components/add-system.tsx
+msgid "Copy Restart Recovery Command"
+msgstr "复制重启恢复命令"
+
+#: src/components/add-system.tsx
+msgid "For recovery after reboot, run this command every minute in Altare Schedules."
+msgstr "要在重启后恢复监控，可在 Altare 的计划任务里每分钟执行此命令。"
+
+#: src/components/add-system.tsx
+msgid "Add System and Copy Command"
+msgstr "添加系统并复制安装命令"
+
+#: src/components/add-system.tsx
+msgid "Could not save the system. Try again."
+msgstr "保存系统失败，请重试。"

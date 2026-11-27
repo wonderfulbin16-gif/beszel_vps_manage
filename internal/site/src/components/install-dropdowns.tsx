@@ -1,5 +1,6 @@
 import { i18n } from "@lingui/core"
 import { memo } from "react"
+import sandboxInstaller from "@/lib/install-sandbox-agent.sh?raw"
 import { copyToClipboard, getHubURL } from "@/lib/utils"
 import { DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu"
 
@@ -62,6 +63,22 @@ export function copyWindowsCommand(port = "45876", publicKey: string, token: str
 	copyToClipboard(
 		`& iwr -useb ${getScriptUrl()} -OutFile "$env:TEMP\\install-agent.ps1"; & Powershell -ExecutionPolicy Bypass -File "$env:TEMP\\install-agent.ps1" -Key "${publicKey}" -Port ${port} -Token "${token}" -Url "${getHubURL()}"`
 	)
+}
+
+export const sandboxHost = "/dev/null"
+export const sandboxStartCommand = '"$HOME/.local/share/beszel-sandbox-agent/start"'
+
+export function copySandboxCommand(publicKey: string, token: string) {
+	const quote = (value: string) => "'" + value.replace(/[\r\n]+/g, " ").replaceAll("'", "'\"'\"'") + "'"
+	const hubVersion = globalThis.BESZEL?.HUB_VERSION
+	const version = /^\d+\.\d+\.\d+$/.test(hubVersion ?? "") ? hubVersion : "0.21.2"
+	return copyToClipboard(`sh <<'BESZEL_SANDBOX_INSTALL'
+agent_version=${quote(version)}
+hub_url=${quote(getHubURL())}
+hub_key=${quote(publicKey)}
+agent_token=${quote(token)}
+${sandboxInstaller.trimEnd()}
+BESZEL_SANDBOX_INSTALL`)
 }
 
 export interface DropdownItem {

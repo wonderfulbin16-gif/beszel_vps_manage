@@ -2621,3 +2621,31 @@ msgstr "Yes"
 #: src/components/routes/settings/layout.tsx
 msgid "Your user settings have been updated."
 msgstr "Your user settings have been updated."
+
+#: src/components/add-system.tsx
+msgid "Altare / Sandbox"
+msgstr "Altare / Sandbox"
+
+#: src/components/add-system.tsx
+msgid "For Altare and other Linux sandboxes without systemd. Save the system, then paste the installation command into its terminal. The agent connects to the hub over WebSocket."
+msgstr "For Altare and other Linux sandboxes without systemd. Save the system, then paste the installation command into its terminal. The agent connects to the hub over WebSocket."
+
+#: src/components/add-system.tsx
+msgid "Copy Sandbox Install Command"
+msgstr "Copy Sandbox Install Command"
+
+#: src/components/add-system.tsx
+msgid "Copy Restart Recovery Command"
+msgstr "Copy Restart Recovery Command"
+
+#: src/components/add-system.tsx
+msgid "For recovery after reboot, run this command every minute in Altare Schedules."
+msgstr "For recovery after reboot, run this command every minute in Altare Schedules."
+
+#: src/components/add-system.tsx
+msgid "Add System and Copy Command"
+msgstr "Add System and Copy Command"
+
+#: src/components/add-system.tsx
+msgid "Could not save the system. Try again."
+msgstr "Could not save the system. Try again."

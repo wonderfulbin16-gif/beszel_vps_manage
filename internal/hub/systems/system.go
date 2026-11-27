@@ -756,9 +756,9 @@ func shouldCloseWebSocket(err error) bool {
 // getSSHTransport returns the system's SSH transport, creating it on first use.
 // The transport owns the only SSH connection to the agent; it is shared by the
 // updater and on-demand requests and connects lazily.
-// It returns errSSHDisabled if DISABLE_SSH is set on the hub.
+// It returns errSSHDisabled if DISABLE_SSH is set on the hub or the system only uses WebSocket.
 func (sys *System) getSSHTransport() (*transport.SSHTransport, error) {
-	if sshFallbackDisabled() {
+	if sys.Host == "/dev/null" || sshFallbackDisabled() {
 		return nil, errSSHDisabled
 	}
 	sys.sshMu.Lock()

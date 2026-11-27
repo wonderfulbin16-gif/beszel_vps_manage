@@ -16,18 +16,22 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/use-toast"
 import { isReadOnlyUser, pb } from "@/lib/api"
 import { SystemStatus } from "@/lib/enums"
 import { $publicKey } from "@/lib/stores"
-import { cn, generateToken, tokenMap, useBrowserStorage } from "@/lib/utils"
+import { cn, copyToClipboard, generateToken, tokenMap, useBrowserStorage } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
 import {
 	copyDockerCompose,
 	copyDockerRun,
 	copyLinuxCommand,
+	copySandboxCommand,
 	copyWindowsCommand,
 	type DropdownItem,
 	InstallDropdown,
+	sandboxHost,
+	sandboxStartCommand,
 } from "./install-dropdowns"
 import { $router, basePath, Link, navigate } from "./router"
 import { DropdownMenu, DropdownMenuTrigger } from "./ui/dropdown-menu"
@@ -68,10 +72,16 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 	const { t } = useLingui()
 	const publicKey = useStore($publicKey)
 	const port = useRef<HTMLInputElement>(null)
-	const [hostValue, setHostValue] = useState(system?.host ?? "")
+	const initialHost = system?.host === sandboxHost ? "" : (system?.host ?? "")
+	const [hostValue, setHostValue] = useState(initialHost)
 	const isUnixSocket = hostValue.startsWith("/")
-	const [tab, setTab] = useBrowserStorage("as-tab", "docker")
+	const [savedTab, setSavedTab] = useBrowserStorage("as-tab", "docker")
+	const [editTab, setEditTab] = useState<string | null>(null)
+	const defaultEditTab = system?.host === sandboxHost ? "sandbox" : savedTab === "binary" ? "binary" : "docker"
+	const tab = system ? (editTab ?? defaultEditTab) : savedTab
+	const isSandbox = tab === "sandbox"
 	const [token, setToken] = useState(system?.token ?? "")
+	const [isSaving, setIsSaving] = useState(false)
 
 	useEffect(() => {
 		;(async () => {
@@ -92,23 +102,38 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 		})()
 	}, [system?.id, nextSystemToken])
 
-	async function handleSubmit(e: SubmitEvent) {
+	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault()
-		const formData = new FormData(e.target as HTMLFormElement)
-		const data = Object.fromEntries(formData)
-		const metadata = {
-			ip: String(data.ip ?? "").trim(),
+		if (isSaving || (isSandbox && (!token || !publicKey))) {
+			return
 		}
+		const formData = new FormData(e.currentTarget)
+		const data = {
+			name: String(formData.get("name")),
+			host: isSandbox ? sandboxHost : hostValue,
+			port: isSandbox ? "" : String(formData.get("port") ?? ""),
+		}
+		const metadata = {
+			ip: String(formData.get("ip") ?? "").trim(),
+		}
+		setIsSaving(true)
 		try {
-			setOpen(false)
 			if (system) {
 				// Don't send users on update, or other users of a shared system would be removed
 				const settingsChanged =
-					data.name !== system.name || data.host !== system.host || (!isUnixSocket && data.port !== system.port)
-				await pb.collection("systems").update(
-					system.id,
-					settingsChanged ? { ...data, ...metadata, status: SystemStatus.Pending } : metadata
-				)
+					data.name !== system.name ||
+					data.host !== system.host ||
+					((!isUnixSocket || isSandbox) && data.port !== system.port)
+				await pb
+					.collection("systems")
+					.update(system.id, settingsChanged ? { ...data, ...metadata, status: SystemStatus.Pending } : metadata)
+			} else if (isSandbox) {
+				const id = generateToken().replaceAll("-", "").slice(0, 15)
+				const batch = pb.createBatch()
+				batch.collection("systems").create({ id, ...data, ...metadata, users: pb.authStore.record!.id })
+				batch.collection("fingerprints").create({ system: id, token })
+				await batch.send()
+				nextSystemToken = null
 			} else {
 				const createdSystem = await pb.collection("systems").create({
 					...data,
@@ -123,9 +148,16 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 				// creation so next system gets a new token
 				nextSystemToken = null
 			}
+			setOpen(false)
+			if (isSandbox && !system) {
+				void copySandboxCommand(publicKey, token)
+			}
 			navigate(basePath)
 		} catch (e) {
 			console.error(e)
+			toast({ variant: "destructive", description: t`Could not save the system. Try again.` })
+		} finally {
+			setIsSaving(false)
 		}
 	}
 
@@ -133,22 +165,26 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 		<DialogContent
 			className="w-[90%] sm:w-auto sm:ns-dialog max-w-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg"
 			onCloseAutoFocus={() => {
-				setHostValue(system?.host ?? "")
+				setHostValue(initialHost)
+				setEditTab(null)
 			}}
 		>
-			<Tabs value={tab} onValueChange={setTab}>
+			<Tabs value={tab} onValueChange={system ? setEditTab : setSavedTab}>
 				<DialogHeader>
 					<DialogTitle className="mb-1 pb-1 max-w-100 truncate pr-8">
 						{system ? <Trans>Edit System</Trans> : <Trans>Add System</Trans>}
 					</DialogTitle>
-					<TabsList className="grid w-full grid-cols-2">
+					<TabsList className="grid w-full grid-cols-3">
 						<TabsTrigger value="docker">Docker</TabsTrigger>
 						<TabsTrigger value="binary">
 							<Trans>Binary</Trans>
 						</TabsTrigger>
+						<TabsTrigger value="sandbox" className="px-1">
+							<Trans>Altare / Sandbox</Trans>
+						</TabsTrigger>
 					</TabsList>
 				</DialogHeader>
-				{/* Keep both translations in the same grid cell so tab changes do not resize the dialog. */}
+				{/* Keep descriptions in the same grid cell so tab changes do not resize the dialog. */}
 				<DialogDescription asChild className="mb-3 leading-relaxed">
 					<div className="grid">
 						{/* Docker (set tab index to prevent auto focusing content in edit system dialog) */}
@@ -195,27 +231,41 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 								</Trans>
 							</p>
 						</TabsContent>
+						<TabsContent
+							value="sandbox"
+							forceMount
+							tabIndex={-1}
+							className="col-start-1 row-start-1 data-[state=inactive]:invisible"
+						>
+							<p className="w-0 min-w-full">
+								<Trans>
+									For Altare and other Linux sandboxes without systemd. Save the system, then paste the installation
+									command into its terminal. The agent connects to the hub over WebSocket.
+								</Trans>
+							</p>
+						</TabsContent>
 					</div>
 				</DialogDescription>
-				<form onSubmit={handleSubmit as any}>
+				<form onSubmit={handleSubmit}>
 					<div className="grid xs:grid-cols-[auto_1fr] gap-y-3 gap-x-4 items-center mt-1 mb-4">
 						<Label htmlFor="name" className="xs:text-end">
 							<Trans>Name</Trans>
 						</Label>
 						<Input id="name" name="name" defaultValue={system?.name} required />
-						<Label htmlFor="host" className="xs:text-end">
+						<Label htmlFor="host" className={cn("xs:text-end", isSandbox && "hidden")}>
 							<Trans>Host / IP</Trans>
 						</Label>
 						<Input
 							id="host"
 							name="host"
 							value={hostValue}
-							required
+							required={!isSandbox}
+							className={cn(isSandbox && "hidden")}
 							onChange={(e) => {
 								setHostValue(e.target.value)
 							}}
 						/>
-						<Label htmlFor="port" className={cn("xs:text-end", isUnixSocket && "hidden")}>
+						<Label htmlFor="port" className={cn("xs:text-end", (isUnixSocket || isSandbox) && "hidden")}>
 							<Trans>Port</Trans>
 						</Label>
 						<Input
@@ -223,13 +273,20 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 							name="port"
 							id="port"
 							defaultValue={system?.port || "45876"}
-							required={!isUnixSocket}
-							className={cn(isUnixSocket && "hidden")}
+							required={!isUnixSocket && !isSandbox}
+							className={cn((isUnixSocket || isSandbox) && "hidden")}
 						/>
 						<Label htmlFor="ip" className="xs:text-end">
 							<Trans>IP</Trans>
 						</Label>
-						<Input id="ip" name="ip" defaultValue={system?.ip} maxLength={64} autoCapitalize="none" spellCheck={false} />
+						<Input
+							id="ip"
+							name="ip"
+							defaultValue={system?.ip}
+							maxLength={64}
+							autoCapitalize="none"
+							spellCheck={false}
+						/>
 						<Label htmlFor="ip-region" className="xs:text-end">
 							<Trans>IP Region</Trans>
 						</Label>
@@ -244,7 +301,7 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 						<InputCopy value={token} id="tkn" name="tkn" />
 					</div>
 					<DialogFooter className="flex justify-end gap-x-2 gap-y-3 flex-col mt-5">
-						<div className="grid">
+						<div className={cn("grid", isSandbox && "hidden")}>
 							{/* Docker */}
 							<div className={cn("col-start-1 row-start-1", tab !== "docker" && "invisible")}>
 								<CopyButton
@@ -299,8 +356,36 @@ export const SystemDialog = ({ setOpen, system }: { setOpen: (open: boolean) => 
 								/>
 							</div>
 						</div>
+						{isSandbox && (
+							<div className="grid gap-2">
+								{system && (
+									<Button
+										type="button"
+										variant="outline"
+										onClick={() => copySandboxCommand(publicKey, token)}
+										disabled={!publicKey || !token}
+									>
+										<Trans>Copy Sandbox Install Command</Trans>
+									</Button>
+								)}
+								<Button type="button" variant="outline" onClick={() => copyToClipboard(sandboxStartCommand)}>
+									<Trans>Copy Restart Recovery Command</Trans>
+								</Button>
+								<p className="text-sm text-muted-foreground">
+									<Trans>For recovery after reboot, run this command every minute in Altare Schedules.</Trans>
+								</p>
+							</div>
+						)}
 						{/* Save */}
-						<Button>{system ? <Trans>Save System</Trans> : <Trans>Add System</Trans>}</Button>
+						<Button disabled={isSaving || (isSandbox && (!token || !publicKey))}>
+							{system ? (
+								<Trans>Save System</Trans>
+							) : isSandbox ? (
+								<Trans>Add System and Copy Command</Trans>
+							) : (
+								<Trans>Add System</Trans>
+							)}
+						</Button>
 					</DialogFooter>
 				</form>
 			</Tabs>

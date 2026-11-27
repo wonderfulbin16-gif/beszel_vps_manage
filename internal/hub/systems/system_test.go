@@ -248,6 +248,13 @@ func TestSSHDisabledSkipsSSHFallback(t *testing.T) {
 	require.ErrorIs(t, err, errSSHDisabled)
 }
 
+func TestSandboxSkipsSSHFallback(t *testing.T) {
+	// A missing manager would panic if this system attempted to dial SSH.
+	sys := &System{Host: "/dev/null"}
+	_, err := sys.fetchDataFromAgent(common.DataRequestOptions{})
+	require.ErrorIs(t, err, errSSHDisabled)
+}
+
 func TestSSHFallbackDialsAgentUnlessDisabled(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
