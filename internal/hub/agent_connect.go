@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,7 @@ type agentConnectRequest struct {
 	res         http.ResponseWriter
 	token       string
 	agentSemVer semver.Version
+	ingressIP   netip.Addr
 	// isUniversalToken is true if the token is a universal token.
 	isUniversalToken bool
 	// userId is the user ID associated with the universal token.
@@ -89,6 +92,13 @@ func (acr *agentConnectRequest) agentConnect() (err error) {
 		return acr.sendResponseError(acr.res, http.StatusUnauthorized, "Invalid agent version")
 	}
 
+	// The existing egress probe setting opts this deployment into the
+	// Northflank public ingress header. Generic forwarding headers cannot
+	// be used for persisted addresses.
+	if strings.TrimSpace(os.Getenv("BESZEL_EGRESS_SYSTEM_ID")) != "" {
+		acr.ingressIP = parseNorthflankEgressIP(acr.req.Header.Values("X-Envoy-External-Address"))
+	}
+
 	// Upgrade connection to WebSocket
 	conn, err := ws.GetUpgrader().Upgrade(acr.res, acr.req)
 	if err != nil {
@@ -133,7 +143,13 @@ func (acr *agentConnectRequest) verifyWsConn(conn *gws.Conn, fpRecords []ws.Fing
 		return err
 	}
 
-	return acr.hub.sm.AddWebSocketSystem(fpRecord.SystemId, acr.agentSemVer, wsConn)
+	if err := acr.hub.sm.AddWebSocketSystem(fpRecord.SystemId, acr.agentSemVer, wsConn); err != nil {
+		return err
+	}
+	if acr.ingressIP.IsValid() {
+		acr.hub.recordSandboxEgressIP(fpRecord.SystemId, acr.ingressIP)
+	}
+	return nil
 }
 
 // validateAgentHeaders extracts and validates the token and agent version from HTTP headers.

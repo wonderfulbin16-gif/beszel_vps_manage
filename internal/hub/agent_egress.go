@@ -1,14 +1,17 @@
 package hub
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"github.com/henrygd/beszel/internal/hub/systems"
 )
 
 // agentEgressHandler associates a source address observed at the Northflank
@@ -49,18 +52,42 @@ func agentEgressHandler(systemID string) func(*core.RequestEvent) error {
 			if err != nil {
 				return err
 			}
-			if record.GetString("ip") == ip.String() {
-				return nil
-			}
-			record.IgnoreUnchangedFields(true)
-			record.Set("ip", ip.String())
-			return tx.SaveWithContext(e.Request.Context(), record)
+			return saveSystemEgressIP(e.Request.Context(), tx, record, ip)
 		})
 		if err != nil {
 			return err
 		}
 		return e.NoContent(http.StatusNoContent)
 	}
+}
+
+func (h *Hub) recordSandboxEgressIP(systemID string, ip netip.Addr) {
+	// The WebSocket handshake has completed and the HTTP request may have ended.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := h.RunInTransaction(func(tx core.App) error {
+		record, err := tx.FindRecordById("systems", systemID)
+		if err != nil {
+			return err
+		}
+		if record.GetString("host") != systems.WebSocketOnlyHost {
+			return nil
+		}
+		return saveSystemEgressIP(ctx, tx, record, ip)
+	})
+	if err != nil {
+		h.Logger().Warn("Failed to update sandbox egress IP", "system", systemID, "error", err)
+	}
+}
+
+func saveSystemEgressIP(ctx context.Context, app core.App, record *core.Record, ip netip.Addr) error {
+	address := ip.String()
+	if record.GetString("ip") == address {
+		return nil
+	}
+	record.IgnoreUnchangedFields(true)
+	record.Set("ip", address)
+	return app.SaveWithContext(ctx, record)
 }
 
 var (

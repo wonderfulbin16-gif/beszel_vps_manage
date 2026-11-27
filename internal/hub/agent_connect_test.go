@@ -770,6 +770,7 @@ func TestHandleAgentConnect(t *testing.T) {
 func TestAgentWebSocketIntegration(t *testing.T) {
 	// Connection fixtures do not exercise the host package manager.
 	t.Setenv("BESZEL_AGENT_PACKAGE_UPDATES_INTERVAL", "0")
+	t.Setenv("BESZEL_EGRESS_SYSTEM_ID", "legacy-probe-system")
 	// Create hub and test app
 	hub, testApp, err := createTestHub(t)
 	require.NoError(t, err)
@@ -793,6 +794,8 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 	// Create HTTP server with the actual API route
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/beszel/agent-connect" {
+			r.Header.Set("X-Envoy-External-Address", "1.1.1.1")
+			r.Header.Set("X-Forwarded-For", "9.9.9.9")
 			acr := &agentConnectRequest{
 				hub: hub,
 				req: r,
@@ -816,6 +819,9 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 		expectFingerprint  string // "empty", "unchanged", or "updated"
 		expectSystemStatus string
 		description        string
+		host               string
+		initialIP          string
+		expectedIP         string
 	}{
 		{
 			name:               "empty fingerprint - agent sets fingerprint on first connection",
@@ -828,6 +834,8 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 			expectFingerprint:  "updated",
 			expectSystemStatus: "up",
 			description:        "Agent should connect and set its fingerprint when DB fingerprint is empty",
+			host:               "/dev/null",
+			expectedIP:         "1.1.1.1",
 		},
 		{
 			name:               "matching fingerprint should be accepted",
@@ -840,6 +848,9 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 			expectFingerprint:  "unchanged",
 			expectSystemStatus: "up",
 			description:        "Agent should connect when its fingerprint matches existing DB fingerprint",
+			host:               "/dev/null",
+			initialIP:          "sandbox-ingress.example.test",
+			expectedIP:         "1.1.1.1",
 		},
 		{
 			name:               "fingerprint mismatch should be rejected",
@@ -852,6 +863,7 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 			expectFingerprint:  "unchanged",
 			expectSystemStatus: "pending",
 			description:        "Agent should be rejected when its fingerprint doesn't match existing DB fingerprint",
+			host:               "/dev/null",
 		},
 		{
 			name:               "invalid token should be rejected",
@@ -878,18 +890,36 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 			expectSystemStatus: "pending",
 			description:        "Connection should fail when agent uses wrong SSH key",
 		},
+		{
+			name:               "normal SSH host keeps its manually entered IP",
+			agentToken:         "test-token-6",
+			dbToken:            "test-token-6",
+			agentFingerprint:   "agent-fingerprint-6",
+			dbFingerprint:      "agent-fingerprint-6",
+			agentSSHKey:        goodPubKey,
+			expectConnection:   true,
+			expectFingerprint:  "unchanged",
+			expectSystemStatus: "up",
+			initialIP:          "8.8.4.4",
+			expectedIP:         "8.8.4.4",
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create test system with unique port for each test
 			portNum := 45000 + len(tc.name) // Use name length to get unique port
+			host := tc.host
+			if host == "" {
+				host = "localhost"
+			}
 			systemRecord, err := createTestRecord(testApp, "systems", map[string]any{
 				"name":   fmt.Sprintf("test-system-%s", tc.name),
-				"host":   "localhost",
+				"host":   host,
 				"port":   fmt.Sprintf("%d", portNum),
 				"status": "pending",
 				"users":  []string{userRecord.Id},
+				"ip":     tc.initialIP,
 			})
 			require.NoError(t, err)
 
@@ -1002,6 +1032,7 @@ func TestAgentWebSocketIntegration(t *testing.T) {
 				}
 				status = updatedSystemRecord.GetString("status")
 				assert.Equal(c, tc.expectSystemStatus, status, "System status should match expected value")
+				assert.Equal(c, tc.expectedIP, updatedSystemRecord.GetString("ip"))
 			}, 5*time.Second, 20*time.Millisecond)
 
 			t.Logf("%s - System status: %s, Fingerprint: %s", tc.description, status, finalFingerprint)

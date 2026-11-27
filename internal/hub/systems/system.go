@@ -68,6 +68,9 @@ type System struct {
 	lastSavedMonitorProbe map[string]int64
 }
 
+// WebSocketOnlyHost marks a system that connects from a sandbox without inbound SSH.
+const WebSocketOnlyHost = "/dev/null"
+
 // errSSHDisabled is returned instead of dialing SSH when DISABLE_SSH is set on the hub.
 var errSSHDisabled = errors.New("no WebSocket connection and SSH is disabled")
 
@@ -758,7 +761,7 @@ func shouldCloseWebSocket(err error) bool {
 // updater and on-demand requests and connects lazily.
 // It returns errSSHDisabled if DISABLE_SSH is set on the hub or the system only uses WebSocket.
 func (sys *System) getSSHTransport() (*transport.SSHTransport, error) {
-	if sys.Host == "/dev/null" || sshFallbackDisabled() {
+	if sys.Host == WebSocketOnlyHost || sshFallbackDisabled() {
 		return nil, errSSHDisabled
 	}
 	sys.sshMu.Lock()
