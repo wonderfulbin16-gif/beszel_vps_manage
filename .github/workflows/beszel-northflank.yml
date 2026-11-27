@@ -1,8 +1,6 @@
 name: Publish Beszel to Northflank
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
@@ -28,39 +26,39 @@ env:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/codex/beszel-northflank-transfer-check'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SOURCE_SHA: 63cac3521a7a06596f2fd57a0694376ae973e354
+      RESERVED_IMAGE_ID: 6b092f5981a1d24221667f4b
+      RESERVED_IMAGE_TAG: sha-63cac3521a7a06596f2fd57a0694376ae973e354-45957601476-1
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Build Linux amd64 image
         run: |
+          cp supplemental/northflank/upload-oci.py "$RUNNER_TEMP/upload-oci.py"
+          git checkout --detach "$SOURCE_SHA"
           docker buildx create --driver docker-container --use
           docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
             --file Dockerfile.northflank \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
             --output "type=oci,dest=$RUNNER_TEMP/beszel.oci.tar" .
 
       - name: Publish and verify project image
-        if: github.event_name == 'push' || inputs.publish
+        if: inputs.publish
         env:
-          GH_TOKEN: ${{ github.token }}
           NORTHFLANK_IMAGE_PUSH_TOKEN: ${{ secrets.NORTHFLANK_IMAGE_PUSH_TOKEN }}
         run: |
           if [[ -z "$NORTHFLANK_IMAGE_PUSH_TOKEN" ]]; then
             echo '::error::Set NORTHFLANK_IMAGE_PUSH_TOKEN to enable publishing.'
             exit 1
-          fi
-
-          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
-          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
-            echo 'This commit is no longer the tip of main. The image was not published.'
-            exit 0
           fi
 
           northflank_api() {
@@ -69,11 +67,21 @@ jobs:
           }
 
           # Reserve an immutable tag and use the short-lived, repository-scoped upload token.
-          tag="sha-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          tag="$RESERVED_IMAGE_TAG"
           api="https://api.northflank.com/v1/projects/$NORTHFLANK_PROJECT/images"
-          payload=$(jq -nc --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" '{name: $name, tag: $tag}')
-          reservation=$(northflank_api --header 'Content-Type: application/json' \
-            --request POST --data "$payload" "$api/upload-credentials")
+          payload=$(jq -nc --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" \
+            --arg imageId "$RESERVED_IMAGE_ID" '{name: $name, tag: $tag, imageId: $imageId}')
+          response_file="$RUNNER_TEMP/transfer-reservation.json"
+          trap 'rm -f "$response_file"' EXIT
+          code=$(printf 'Authorization: Bearer %s\n' "$NORTHFLANK_IMAGE_PUSH_TOKEN" | \
+            curl --silent --show-error --max-time 15 --header @- --header 'Content-Type: application/json' \
+              --request POST --data "$payload" --output "$response_file" --write-out '%{http_code}' "$api/upload-credentials")
+          if [[ "$code" != 200 ]]; then
+            printf '::error::Refreshing the existing reservation returned HTTP %s\n' "$code"
+            exit 1
+          fi
+          reservation=$(cat "$response_file")
+          rm -f "$response_file"
 
           registry_url=$(jq -r '.data.registryUrl // ""' <<< "$reservation")
           repository=$(jq -r '.data.repository // ""' <<< "$reservation")
@@ -94,7 +102,7 @@ jobs:
 
           printf 'Reserved Northflank image %s:%s (%s)\n' "$NORTHFLANK_IMAGE" "$tag" "$image_id"
           NORTHFLANK_UPLOAD_TOKEN="$upload_token" \
-            python3 supplemental/northflank/upload-oci.py "$RUNNER_TEMP/beszel.oci.tar" "$repository" "$tag"
+            python3 "$RUNNER_TEMP/upload-oci.py" "$RUNNER_TEMP/beszel.oci.tar" "$repository" "$tag"
           unset upload_token
 
           # Hold the workflow's concurrency slot until Northflank validates the image.
