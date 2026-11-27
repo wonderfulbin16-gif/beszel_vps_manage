@@ -13,6 +13,7 @@ from urllib.parse import urlencode, urljoin, urlsplit
 
 REGISTRY = "registry.northflank.com"
 TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+CHUNK_SIZE = 4 * 1024 * 1024
 
 
 def read_blob(archive, descriptor):
@@ -25,10 +26,12 @@ def read_blob(archive, descriptor):
     return contents
 
 
-def registry_request(token, method, path, description, expected, body=b"", media_type=None):
+def registry_request(token, method, path, description, expected, body=b"", media_type=None, content_range=None):
     headers = {"Authorization": f"Bearer {token}"}
     if media_type:
         headers["Content-Type"] = media_type
+    if content_range:
+        headers["Content-Range"] = content_range
     for delay in (0, 2, 5, 10, 20):
         if delay:
             time.sleep(delay)
@@ -38,8 +41,9 @@ def registry_request(token, method, path, description, expected, body=b"", media
             response = connection.getresponse()
             status = response.status
             location = response.getheader("Location")
-        except (OSError, http.client.HTTPException):
+        except (OSError, http.client.HTTPException) as error:
             status = None
+            failure = type(error).__name__
         finally:
             connection.close()
 
@@ -47,23 +51,37 @@ def registry_request(token, method, path, description, expected, body=b"", media
             return location
         if status is not None and status not in TRANSIENT_STATUS:
             raise RuntimeError(f"{description} returned HTTP {status}")
-        print(f"{description} returned {'HTTP ' + str(status) if status else 'a connection error'}", flush=True)
+        print(f"{description} returned {'HTTP ' + str(status) if status else failure}", flush=True)
 
     raise RuntimeError(f"{description} did not succeed after retries")
 
 
-def upload_blob(token, repository, digest, body):
-    upload_path = f"/v2/{repository}/blobs/uploads/"
-    location = registry_request(token, "POST", upload_path, "Start blob upload", 202)
+def upload_target(location, upload_path):
     if not location:
         raise RuntimeError("Registry did not return a blob upload URL")
     target = urlsplit(urljoin(f"https://{REGISTRY}{upload_path}", location))
     if target.scheme not in {"http", "https"} or target.netloc != REGISTRY or not target.path.startswith(upload_path):
         raise RuntimeError("Registry returned an unexpected blob upload URL")
+    return target
+
+
+def upload_blob(token, repository, digest, body):
+    upload_path = f"/v2/{repository}/blobs/uploads/"
+    print(f"Uploading blob {digest[:19]} ({len(body)} bytes)", flush=True)
+    location = registry_request(token, "POST", upload_path, "Start blob upload", 202)
+    for start in range(0, len(body), CHUNK_SIZE):
+        target = upload_target(location, upload_path)
+        path = f"{target.path}?{target.query}" if target.query else target.path
+        chunk = body[start:start + CHUNK_SIZE]
+        byte_range = f"{start}-{start + len(chunk) - 1}"
+        location = registry_request(token, "PATCH", path, f"Send blob bytes {byte_range}", 202,
+                                    chunk, "application/octet-stream", byte_range)
+
+    target = upload_target(location, upload_path)
     query = target.query + "&" if target.query else ""
     query += urlencode({"digest": digest})
     registry_request(token, "PUT", f"{target.path}?{query}", "Finish blob upload", 201,
-                     body, "application/octet-stream")
+                     b"", "application/octet-stream")
 
 
 def main(archive_path, repository, tag):
