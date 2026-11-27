@@ -39,11 +39,12 @@ jobs:
 
       - name: Build Linux amd64 image
         run: |
-          docker buildx build --platform linux/amd64 --load --provenance=false \
+          docker buildx create --driver docker-container --use
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
             --file Dockerfile.northflank \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --tag "beszel-ci:$GITHUB_SHA" .
+            --output "type=oci,dest=$RUNNER_TEMP/beszel.oci.tar" .
 
       - name: Publish and verify project image
         if: github.event_name == 'push' || inputs.publish
@@ -60,11 +61,6 @@ jobs:
           if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
             echo 'This commit is no longer the tip of main. The image was not published.'
             exit 0
-          fi
-
-          if ! command -v skopeo >/dev/null; then
-            sudo apt-get update -q
-            sudo apt-get install -y --no-install-recommends skopeo
           fi
 
           northflank_api() {
@@ -96,17 +92,10 @@ jobs:
             exit 1
           fi
 
-          image="$NORTHFLANK_REGISTRY/$repository:$tag"
-          if ! upload_log=$(skopeo copy --dest-registry-token "$upload_token" \
-            "docker-daemon:beszel-ci:$GITHUB_SHA" "docker://$image" 2>&1); then
-            upload_status=''
-            if [[ "$upload_log" =~ status([[:space:]]+code)?:?[[:space:]]*([45][0-9][0-9])([[:space:]]|$) ]]; then
-              upload_status=" (HTTP ${BASH_REMATCH[2]})"
-            fi
-            printf '::error::Registry upload failed for image %s%s.\n' "$image_id" "$upload_status"
-            exit 1
-          fi
-          unset upload_log upload_token
+          printf 'Reserved Northflank image %s:%s (%s)\n' "$NORTHFLANK_IMAGE" "$tag" "$image_id"
+          NORTHFLANK_UPLOAD_TOKEN="$upload_token" \
+            python3 supplemental/northflank/upload-oci.py "$RUNNER_TEMP/beszel.oci.tar" "$repository" "$tag"
+          unset upload_token
 
           # Hold the workflow's concurrency slot until Northflank validates the image.
           for ((attempt = 1; attempt <= 60; attempt++)); do
@@ -122,7 +111,7 @@ jobs:
                 exit 0
                 ;;
               FAILURE|EXPIRED)
-                echo "::error::Northflank reported $status for $image."
+                echo "::error::Northflank reported $status for $NORTHFLANK_IMAGE:$tag."
                 exit 1
                 ;;
             esac
@@ -130,5 +119,5 @@ jobs:
             sleep 5
           done
 
-          echo "::error::Timed out waiting for Northflank to validate $image."
+          echo "::error::Timed out waiting for Northflank to validate $NORTHFLANK_IMAGE:$tag."
           exit 1
