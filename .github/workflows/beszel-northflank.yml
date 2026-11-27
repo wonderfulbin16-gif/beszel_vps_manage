@@ -68,34 +68,54 @@ jobs:
               curl --fail --silent --show-error --max-time 15 --header @- "$@"
           }
 
-          # Reserve an immutable tag and use the short-lived, repository-scoped upload token.
-          tag="sha-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          # A retry for the same commit can finish its existing upload reservation.
+          tag="sha-$GITHUB_SHA"
           api="https://api.northflank.com/v1/projects/$NORTHFLANK_PROJECT/images"
-          payload=$(jq -nc --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" '{name: $name, tag: $tag}')
-          reservation=$(northflank_api --header 'Content-Type: application/json' \
-            --request POST --data "$payload" "$api/upload-credentials")
+          response=$(northflank_api --retry 2 --get --data-urlencode "nameSearch=$NORTHFLANK_IMAGE" \
+            --data-urlencode "tagSearch=$tag" "$api")
+          image=$(jq -c --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" \
+            '[.data.images[] | select(.name == $name and .tag == $tag)] | first // {}' <<< "$response")
+          status=$(jq -r '.status // ""' <<< "$image")
+          image_id=$(jq -r '.id // ""' <<< "$image")
 
-          registry_url=$(jq -r '.data.registryUrl // ""' <<< "$reservation")
-          repository=$(jq -r '.data.repository // ""' <<< "$reservation")
-          image_id=$(jq -r '.data.imageId // ""' <<< "$reservation")
-          upload_token=$(jq -r '.data.token // ""' <<< "$reservation")
-          unset reservation
-          if [[ "${registry_url%/}" != "https://$NORTHFLANK_REGISTRY" && \
-                "${registry_url%/}" != "$NORTHFLANK_REGISTRY" ]]; then
-            echo '::error::Northflank returned an unexpected upload registry.'
-            exit 1
-          fi
-          if [[ ! "$repository" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ || \
-                ! "$image_id" =~ ^[a-f0-9]{24}$ || \
-                ! "$upload_token" =~ ^[A-Za-z0-9._~+/=-]+$ ]]; then
-            echo '::error::Northflank returned invalid upload credentials.'
-            exit 1
-          fi
+          case "$status" in
+            READY)
+              echo "Northflank already has the image for this commit."
+              exit 0
+              ;;
+            FAILURE|EXPIRED)
+              tag="$tag-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+              image_id=''
+              ;;
+          esac
 
-          printf 'Reserved Northflank image %s:%s (%s)\n' "$NORTHFLANK_IMAGE" "$tag" "$image_id"
-          NORTHFLANK_UPLOAD_TOKEN="$upload_token" \
-            python3 supplemental/northflank/upload-oci.py "$RUNNER_TEMP/beszel.oci.tar" "$repository" "$tag"
-          unset upload_token
+          if [[ "$status" != IMPORTING && "$status" != VALIDATING ]]; then
+            payload=$(jq -nc --arg name "$NORTHFLANK_IMAGE" --arg tag "$tag" --arg imageId "$image_id" \
+              '{name: $name, tag: $tag} + (if $imageId == "" then {} else {imageId: $imageId} end)')
+            reservation=$(northflank_api --header 'Content-Type: application/json' \
+              --request POST --data "$payload" "$api/upload-credentials")
+            registry_url=$(jq -r '.data.registryUrl // ""' <<< "$reservation")
+            repository=$(jq -r '.data.repository // ""' <<< "$reservation")
+            image_id=$(jq -r '.data.imageId // ""' <<< "$reservation")
+            upload_token=$(jq -r '.data.token // ""' <<< "$reservation")
+            unset reservation
+            if [[ "${registry_url%/}" != "https://$NORTHFLANK_REGISTRY" && \
+                  "${registry_url%/}" != "$NORTHFLANK_REGISTRY" ]]; then
+              echo '::error::Northflank returned an unexpected upload registry.'
+              exit 1
+            fi
+            if [[ ! "$repository" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ || \
+                  ! "$image_id" =~ ^[a-f0-9]{24}$ || \
+                  ! "$upload_token" =~ ^[A-Za-z0-9._~+/=-]+$ ]]; then
+              echo '::error::Northflank returned invalid upload credentials.'
+              exit 1
+            fi
+
+            printf 'Reserved Northflank image %s:%s (%s)\n' "$NORTHFLANK_IMAGE" "$tag" "$image_id"
+            NORTHFLANK_UPLOAD_TOKEN="$upload_token" \
+              python3 supplemental/northflank/upload-oci.py "$RUNNER_TEMP/beszel.oci.tar" "$repository" "$tag"
+            unset upload_token
+          fi
 
           # Hold the workflow's concurrency slot until Northflank validates the image.
           for ((attempt = 1; attempt <= 60; attempt++)); do
