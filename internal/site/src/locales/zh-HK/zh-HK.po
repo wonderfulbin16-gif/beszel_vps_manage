@@ -2618,3 +2618,67 @@ msgstr "是"
 #: src/components/routes/settings/layout.tsx
 msgid "Your user settings have been updated."
 msgstr "您的用戶設置已更新。"
+
+#: src/components/cluster-capacity.tsx
+msgid "{missing, plural, one {Missing data for # system} other {Missing data for # systems}}"
+msgstr "{missing, plural, other {# 台缺少該項資料}}"
+
+#: src/components/cluster-capacity.tsx
+msgid "Automatic"
+msgstr "自動"
+
+#: src/components/cluster-capacity.tsx
+msgid "Capacity settings saved"
+msgstr "資源設定已儲存"
+
+#: src/components/cluster-capacity.tsx
+msgid "Clear manual values"
+msgstr "清除手動值"
+
+#: src/components/cluster-capacity.tsx
+msgid "Cluster capacity"
+msgstr "叢集資源彙整"
+
+#: src/components/cluster-capacity.tsx
+msgid "Configure and summarize"
+msgstr "設定與彙整"
+
+#: src/components/cluster-capacity.tsx
+msgid "Detected capacity"
+msgstr "自動讀取"
+
+#: src/components/cluster-capacity.tsx
+msgid "Enter a positive number for each manual capacity."
+msgstr "手動填寫的容量必須是大於 0 的數字。"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Failed to refresh systems"
+msgstr "重新整理用戶端失敗"
+
+#: src/components/cluster-capacity.tsx
+msgid "Include in cluster totals"
+msgstr "將此系統納入彙整"
+
+#: src/components/cluster-capacity.tsx
+msgid "Included systems"
+msgstr "納入彙整"
+
+#: src/components/cluster-capacity.tsx
+msgid "Leave a field blank to use the detected capacity."
+msgstr "留空的欄位將使用自動讀取的容量。"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Refresh systems"
+msgstr "重新整理用戶端"
+
+#: src/components/cluster-capacity.tsx
+msgid "Save"
+msgstr "儲存"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Systems refreshed"
+msgstr "已重新整理用戶端"
+
+#: src/components/cluster-capacity.tsx
+msgid "Unable to save capacity settings. Try again."
+msgstr "無法儲存資源設定。請再試一次。"

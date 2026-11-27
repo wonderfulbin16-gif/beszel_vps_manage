@@ -262,6 +262,34 @@ func containerCpuCount(forceUseCgroup bool) int {
 	return 0
 }
 
+// scopedCPUCapacity returns the allocated vCPU capacity when a cgroup exposes
+// a finite quota or a cpuset narrower than the process's visible CPUs.
+func scopedCPUCapacity() float64 {
+	var quota, assigned float64
+	if dir, ok := cgroupV2Dir(); ok {
+		quota, _ = cpuQuotaCores(dir)
+		assigned = cpusetCount(dir)
+	} else {
+		if dir := utils.CgroupMountPoint(cgroupMountinfo, "cgroup", "cpu"); dir != "" {
+			quota, _ = cpuQuotaCores(dir)
+		}
+		if dir := utils.CgroupMountPoint(cgroupMountinfo, "cgroup", "cpuset"); dir != "" {
+			assigned = cpusetCount(dir)
+		}
+	}
+	visible := float64(cpuNumCPU())
+	if quota > 0 {
+		if assigned > 0 {
+			quota = min(quota, assigned)
+		}
+		return min(quota, visible)
+	}
+	if assigned > 0 && assigned < visible {
+		return assigned
+	}
+	return 0
+}
+
 // cpuCgroupCores returns how many CPU cores the cgroup at dir may use: the
 // smallest of the process affinity mask, the cgroup cpuset, and the CPU quota.
 func cpuCgroupCores(dir string) float64 {

@@ -38,30 +38,17 @@ func containerMemoryMetrics(hostTotal uint64, forceUseCgroup bool) (memoryMetric
 // rather than the agent's own service cgroup. A v1 unlimited limit is a
 // page-aligned LONG_MAX sentinel; the threshold also covers 32-bit kernels.
 func readCgroupMemoryMetrics(dir string, hostTotal uint64, v2 bool) (memoryMetrics, bool) {
-	usageFile, limitFile, cacheKey, shmemKey := "memory.usage_in_bytes", "memory.limit_in_bytes", "total_cache", "total_shmem"
+	usageFile, cacheKey, shmemKey := "memory.usage_in_bytes", "total_cache", "total_shmem"
 	if v2 {
-		usageFile, limitFile, cacheKey, shmemKey = "memory.current", "memory.max", "file", "shmem"
+		usageFile, cacheKey, shmemKey = "memory.current", "file", "shmem"
 	}
 	usage, ok := utils.ReadUintFile(filepath.Join(dir, usageFile))
 	if !ok {
 		return memoryMetrics{}, false
 	}
-	rawLimit, ok := utils.ReadStringFileOK(filepath.Join(dir, limitFile))
+	limit, ok := readCgroupMemoryLimit(dir, v2)
 	if !ok {
 		return memoryMetrics{}, false
-	}
-	var limit uint64
-	if !(v2 && rawLimit == "max") {
-		var err error
-		limit, err = strconv.ParseUint(rawLimit, 10, 64)
-		if err != nil {
-			return memoryMetrics{}, false
-		}
-		if !v2 && (limit >= (uint64(1)<<63)-(1<<20) || limit == 2147479552) {
-			limit = 0 // v1 unlimited sentinel
-		} else if limit == 0 {
-			return memoryMetrics{}, false
-		}
 	}
 	total := limit
 	if hostTotal > 0 && (total == 0 || hostTotal < total) {
@@ -86,4 +73,39 @@ func readCgroupMemoryMetrics(dir string, hostTotal uint64, v2 bool) (memoryMetri
 	// charged as used memory rather than being classified as file cache.
 	cache = min(saturatingSub(cache, shmem), usage)
 	return memoryMetrics{Total: total, Used: usage - cache, BuffCache: cache}, true
+}
+
+func readCgroupMemoryLimit(dir string, v2 bool) (uint64, bool) {
+	limitFile := "memory.limit_in_bytes"
+	if v2 {
+		limitFile = "memory.max"
+	}
+	raw, ok := utils.ReadStringFileOK(filepath.Join(dir, limitFile))
+	if !ok {
+		return 0, false
+	}
+	if v2 && raw == "max" {
+		return 0, true
+	}
+	limit, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || limit == 0 {
+		return 0, false
+	}
+	if !v2 && (limit >= (uint64(1)<<63)-(1<<20) || limit == 2147479552) {
+		return 0, true // v1 unlimited sentinel
+	}
+	return limit, true
+}
+
+func scopedMemoryCapacity() uint64 {
+	if dir, ok := cgroupV2Dir(); ok {
+		if limit, readable := readCgroupMemoryLimit(dir, true); readable {
+			return limit
+		}
+	}
+	if dir := utils.CgroupMountPoint(cgroupMountinfo, "cgroup", "memory"); dir != "" {
+		limit, _ := readCgroupMemoryLimit(dir, false)
+		return limit
+	}
+	return 0
 }

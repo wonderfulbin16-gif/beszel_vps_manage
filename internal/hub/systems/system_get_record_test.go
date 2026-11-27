@@ -76,3 +76,32 @@ func TestBackgroundRecordUpdatePreservesConcurrentIPMetadata(t *testing.T) {
 	assert.Equal(t, "Tokyo", stored.GetString("ip_region"))
 	assert.Equal(t, down, stored.GetString("status"))
 }
+
+func TestSystemCapacityRequestRejectsAutoEditsAndValidatesOverride(t *testing.T) {
+	sys, app := newTestSystemWithHub(t)
+	record, err := app.FindRecordById("systems", sys.Id)
+	require.NoError(t, err)
+	request := &core.RecordRequestEvent{Record: record, RequestEvent: &core.RequestEvent{App: app}}
+	freshRequest := &core.RecordRequestEvent{Record: core.NewRecord(record.Collection()), RequestEvent: request.RequestEvent}
+	require.NoError(t, validateSystemCapacityRequest(freshRequest))
+	freshRequest.Record.Set("capacity", map[string]float64{"cpu": 128})
+	require.ErrorContains(t, validateSystemCapacityRequest(freshRequest), "read-only")
+
+	record.Set("capacity", map[string]float64{"cpu": 128})
+	require.ErrorContains(t, validateSystemCapacityRequest(request), "read-only")
+	record.Set("capacity", record.Original().Get("capacity"))
+
+	record.Set("capacity_override", map[string]float64{"disk": -1})
+	require.ErrorContains(t, validateSystemCapacityRequest(request), "Invalid capacity correction")
+	record.Set("capacity_override", map[string]float64{"disk": 40})
+	record.Set("cluster_excluded", true)
+	require.NoError(t, validateSystemCapacityRequest(request))
+	require.NoError(t, app.SaveNoValidate(record))
+
+	stored, err := app.FindRecordById("systems", sys.Id)
+	require.NoError(t, err)
+	var override map[string]float64
+	require.NoError(t, stored.UnmarshalJSONField("capacity_override", &override))
+	require.Equal(t, map[string]float64{"disk": 40}, override)
+	require.True(t, stored.GetBool("cluster_excluded"))
+}

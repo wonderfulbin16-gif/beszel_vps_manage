@@ -55,16 +55,22 @@ const App = memo(() => {
 		updateUserSettings()
 		// need to get system list before alerts
 		systemsManager.init()
-		systemsManager
-			// get current systems list
-			.refresh()
-			// subscribe to new system updates
-			.then(systemsManager.subscribe)
-			// get current alerts
-			.then(alertManager.refresh)
-			// subscribe to new alert updates
-			.then(alertManager.subscribe)
+		let active = true
+		async function initializeSystems() {
+			try {
+				await systemsManager.refresh()
+			} catch (error) {
+				if (active) console.error("Failed to fetch systems:", error)
+			}
+			if (!active) return
+			await systemsManager.subscribe()
+			if (!active) return
+			await alertManager.refresh()
+			if (active) await alertManager.subscribe()
+		}
+		void initializeSystems()
 		return () => {
+			active = false
 			unsubscribeAuth()
 			alertManager.unsubscribe()
 			systemsManager.unsubscribe()

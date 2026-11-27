@@ -10,6 +10,10 @@ func containerCpuMetrics(uint16, bool) (CpuMetrics, bool) {
 
 func containerCpuCount(bool) int { return 0 }
 
+func useCgroup(bool) bool { return false }
+
+func scopedCPUCapacity() float64 { return 0 }
+
 func (a *Agent) initializeCpu() {}
 
 func (a *Agent) warnIfRootCgroup() {}

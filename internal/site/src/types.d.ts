@@ -24,11 +24,22 @@ export interface FingerprintRecord extends RecordModel {
 	}
 }
 
+export interface SystemCapacity {
+	cpu?: number
+	memory?: number
+	disk?: number
+}
+
 export interface SystemRecord extends RecordModel {
 	name: string
 	host: string
 	ip?: string
 	ip_region?: string
+	/** Detected allocation or capacity, in vCPU and GiB. */
+	capacity?: SystemCapacity
+	/** User-specified limits for cluster totals, in vCPU and GiB. */
+	capacity_override?: SystemCapacity
+	cluster_excluded?: boolean
 	status: "up" | "down" | "paused" | "pending"
 	port: string
 	info: SystemInfo

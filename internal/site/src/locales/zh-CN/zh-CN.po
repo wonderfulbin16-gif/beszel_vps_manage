@@ -2664,3 +2664,67 @@ msgstr "添加系统并复制安装命令"
 #: src/components/add-system.tsx
 msgid "Could not save the system. Try again."
 msgstr "保存系统失败，请重试。"
+
+#: src/components/cluster-capacity.tsx
+msgid "{missing, plural, one {Missing data for # system} other {Missing data for # systems}}"
+msgstr "{missing, plural, other {# 台缺少该项数据}}"
+
+#: src/components/cluster-capacity.tsx
+msgid "Automatic"
+msgstr "自动"
+
+#: src/components/cluster-capacity.tsx
+msgid "Capacity settings saved"
+msgstr "资源配置已保存"
+
+#: src/components/cluster-capacity.tsx
+msgid "Clear manual values"
+msgstr "清除手动值"
+
+#: src/components/cluster-capacity.tsx
+msgid "Cluster capacity"
+msgstr "集群资源汇总"
+
+#: src/components/cluster-capacity.tsx
+msgid "Configure and summarize"
+msgstr "配置与汇总"
+
+#: src/components/cluster-capacity.tsx
+msgid "Detected capacity"
+msgstr "自动读取"
+
+#: src/components/cluster-capacity.tsx
+msgid "Enter a positive number for each manual capacity."
+msgstr "手动填写的容量必须是大于 0 的数字。"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Failed to refresh systems"
+msgstr "刷新客户端失败"
+
+#: src/components/cluster-capacity.tsx
+msgid "Include in cluster totals"
+msgstr "将此系统纳入汇总"
+
+#: src/components/cluster-capacity.tsx
+msgid "Included systems"
+msgstr "纳入汇总"
+
+#: src/components/cluster-capacity.tsx
+msgid "Leave a field blank to use the detected capacity."
+msgstr "留空的字段将使用自动读取的容量。"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Refresh systems"
+msgstr "刷新客户端"
+
+#: src/components/cluster-capacity.tsx
+msgid "Save"
+msgstr "保存"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Systems refreshed"
+msgstr "已刷新客户端"
+
+#: src/components/cluster-capacity.tsx
+msgid "Unable to save capacity settings. Try again."
+msgstr "无法保存资源配置。请重试。"

@@ -2659,3 +2659,67 @@ msgstr "Add System and Copy Command"
 #: src/components/add-system.tsx
 msgid "Could not save the system. Try again."
 msgstr "Could not save the system. Try again."
+
+#: src/components/cluster-capacity.tsx
+msgid "{missing, plural, one {Missing data for # system} other {Missing data for # systems}}"
+msgstr "{missing, plural, one {Missing data for # system} other {Missing data for # systems}}"
+
+#: src/components/cluster-capacity.tsx
+msgid "Automatic"
+msgstr "Automatic"
+
+#: src/components/cluster-capacity.tsx
+msgid "Capacity settings saved"
+msgstr "Capacity settings saved"
+
+#: src/components/cluster-capacity.tsx
+msgid "Clear manual values"
+msgstr "Clear manual values"
+
+#: src/components/cluster-capacity.tsx
+msgid "Cluster capacity"
+msgstr "Cluster capacity"
+
+#: src/components/cluster-capacity.tsx
+msgid "Configure and summarize"
+msgstr "Configure and summarize"
+
+#: src/components/cluster-capacity.tsx
+msgid "Detected capacity"
+msgstr "Detected capacity"
+
+#: src/components/cluster-capacity.tsx
+msgid "Enter a positive number for each manual capacity."
+msgstr "Enter a positive number for each manual capacity."
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Failed to refresh systems"
+msgstr "Failed to refresh systems"
+
+#: src/components/cluster-capacity.tsx
+msgid "Include in cluster totals"
+msgstr "Include in cluster totals"
+
+#: src/components/cluster-capacity.tsx
+msgid "Included systems"
+msgstr "Included systems"
+
+#: src/components/cluster-capacity.tsx
+msgid "Leave a field blank to use the detected capacity."
+msgstr "Leave a field blank to use the detected capacity."
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Refresh systems"
+msgstr "Refresh systems"
+
+#: src/components/cluster-capacity.tsx
+msgid "Save"
+msgstr "Save"
+
+#: src/components/systems-table/systems-table.tsx
+msgid "Systems refreshed"
+msgstr "Systems refreshed"
+
+#: src/components/cluster-capacity.tsx
+msgid "Unable to save capacity settings. Try again."
+msgstr "Unable to save capacity settings. Try again."

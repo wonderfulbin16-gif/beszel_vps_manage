@@ -346,6 +346,12 @@ func (sys *System) createRecords(data *system.CombinedData) (*core.Record, error
 		if len(data.Stats.GPUData) > 0 {
 			info.GpuPct = &data.Info.GpuPct
 		}
+		var previousCapacity system.Capacity
+		_ = systemRecord.UnmarshalJSONField("capacity", &previousCapacity)
+		capacity := system.ReportedCapacity(previousCapacity, systemRecord.GetString("host"), systemRecord.GetString("ip"), data.Info, data.Stats, data.Details)
+		if capacity != previousCapacity {
+			systemRecord.Set("capacity", capacity)
+		}
 		systemRecord.Set("info", info)
 		if err := txApp.SaveNoValidate(systemRecord); err != nil {
 			return err

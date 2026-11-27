@@ -134,6 +134,8 @@ func (sm *SystemManager) Initialize() error {
 // bindEventHooks registers event handlers for system and fingerprint record changes.
 // These hooks ensure the system manager stays synchronized with database changes.
 func (sm *SystemManager) bindEventHooks() {
+	sm.hub.OnRecordCreateRequest("systems").BindFunc(validateSystemCapacityRequest)
+	sm.hub.OnRecordUpdateRequest("systems").BindFunc(validateSystemCapacityRequest)
 	sm.hub.OnRecordCreate("systems").BindFunc(sm.onRecordCreate)
 	sm.hub.OnRecordAfterCreateSuccess("systems").BindFunc(sm.onRecordAfterCreateSuccess)
 	sm.hub.OnRecordUpdate("systems").BindFunc(sm.onRecordUpdate)
@@ -143,6 +145,19 @@ func (sm *SystemManager) bindEventHooks() {
 	sm.hub.OnRealtimeSubscribeRequest().BindFunc(sm.onRealtimeSubscribeRequest)
 	sm.hub.OnRealtimeConnectRequest().BindFunc(sm.onRealtimeConnectRequest)
 	sm.hub.OnTerminate().BindFunc(sm.onTerminate)
+}
+
+func validateSystemCapacityRequest(e *core.RecordRequestEvent) error {
+	if e.Record.GetString("capacity") != e.Record.Original().GetString("capacity") {
+		return e.BadRequestError("Automatically detected capacity is read-only.", nil)
+	}
+	if err := system.ValidateCapacityOverride(e.Record.GetString("capacity_override")); err != nil {
+		return e.BadRequestError("Invalid capacity correction.", err)
+	}
+	// An edit to cluster settings must not write an older monitoring snapshot
+	// back after the background sampler has updated it.
+	e.Record.IgnoreUnchangedFields(true)
+	return e.Next()
 }
 
 // onTerminate cancels SystemManager context on app shutdown

@@ -3,11 +3,11 @@ import { useStore } from "@nanostores/react"
 import { useEffect, useMemo, useState } from "react"
 import { UserAuthForm } from "@/components/login/auth-form"
 import { pb } from "@/lib/api"
-import { $authenticated } from "@/lib/stores"
 import { Logo } from "../logo"
 import { ModeToggle } from "../mode-toggle"
 import { $router } from "../router"
 import { useTheme } from "../theme-provider"
+import { completeLogin } from "./complete-login"
 import ForgotPassword from "./forgot-pass-form"
 import { loadLogin } from "./load-login"
 import { OtpRequestForm } from "./otp-forms"
@@ -37,7 +37,7 @@ export default function () {
 			.then((result) => {
 				if (controller.signal.aborted) return
 				if (result.authenticated) {
-					$authenticated.set(true)
+					completeLogin()
 					return
 				}
 				document.title = `${t`Login`} / Beszel`

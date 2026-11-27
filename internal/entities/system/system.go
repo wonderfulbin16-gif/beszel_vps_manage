@@ -218,6 +218,10 @@ type Info struct {
 
 	SandboxDiskUsed    *float64 `json:"sdu,omitempty" cbor:"28,keyasint,omitempty"` // latest successful visible file usage in GiB
 	SandboxDiskEnabled bool     `json:"sde,omitzero" cbor:"29,keyasint,omitempty"`
+
+	CapacityScoped bool    `json:"csp,omitzero" cbor:"30,keyasint,omitempty"`  // the limits are for a cgroup, not the host
+	CPUCapacity    float64 `json:"ccp,omitzero" cbor:"31,keyasint,omitempty"`  // allocated vCPU capacity
+	MemoryCapacity uint64  `json:"cmem,omitzero" cbor:"32,keyasint,omitempty"` // allocated memory bytes
 }
 
 // Data that does not change during process lifetime and is not needed in All Systems table

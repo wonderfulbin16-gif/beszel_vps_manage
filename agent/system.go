@@ -277,6 +277,11 @@ func (a *Agent) getSystemStats(cacheTimeMs uint16) system.Stats {
 	a.systemInfo.DiskPct = systemStats.DiskPct
 	a.systemInfo.SandboxDiskEnabled = a.sandboxDisk != nil
 	a.systemInfo.SandboxDiskUsed = systemStats.SandboxDiskUsed
+	a.systemInfo.CapacityScoped = useCgroup(a.forceUseCgroup || a.sandboxDisk != nil)
+	if a.systemInfo.CapacityScoped {
+		a.systemInfo.CPUCapacity = scopedCPUCapacity()
+		a.systemInfo.MemoryCapacity = scopedMemoryCapacity()
+	}
 	a.systemInfo.Battery = systemStats.Battery
 	a.systemInfo.Uptime, _ = getUptime()
 	a.systemInfo.BandwidthBytes = systemStats.Bandwidth[0] + systemStats.Bandwidth[1]

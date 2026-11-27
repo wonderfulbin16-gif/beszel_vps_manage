@@ -26,10 +26,12 @@ import {
 	LayoutGridIcon,
 	LayoutListIcon,
 	LoaderCircleIcon,
+	RefreshCwIcon,
 	Settings2Icon,
 	XIcon,
 } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ClusterCapacity } from "@/components/cluster-capacity"
 import { IPGeolocationCredit } from "@/components/system-ip-region"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,9 +48,19 @@ import {
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination"
 import { Input } from "@/components/ui/input"
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { toast } from "@/components/ui/use-toast"
 import { SystemStatus } from "@/lib/enums"
 import { queueUserSettings } from "@/lib/api"
-import { $downSystems, $pausedSystems, $systems, $systemsLoaded, $upSystems, $userSettings } from "@/lib/stores"
+import {
+	$authenticated,
+	$downSystems,
+	$pausedSystems,
+	$systems,
+	$systemsLoaded,
+	$upSystems,
+	$userSettings,
+} from "@/lib/stores"
+import { refresh } from "@/lib/systemsManager"
 import { cn, runOnce } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
 import AlertButton from "../alerts/alert-button"
@@ -69,6 +81,18 @@ export default function SystemsTable() {
 	const upSystems = $upSystems.get()
 	const pausedSystems = $pausedSystems.get()
 	const { i18n, t } = useLingui()
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const refreshSystems = useCallback(async () => {
+		setIsRefreshing(true)
+		try {
+			await refresh()
+			if ($authenticated.get()) toast({ title: t`Systems refreshed` })
+		} catch {
+			if ($authenticated.get()) toast({ title: t`Failed to refresh systems`, variant: "destructive" })
+		} finally {
+			setIsRefreshing(false)
+		}
+	}, [t])
 	const [filter, setFilter] = useState<string>("")
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>(
 		() =>
@@ -238,8 +262,8 @@ export default function SystemsTable() {
 						</CardDescription>
 					</div>
 
-					<div className="flex gap-2 ms-auto w-full md:w-80">
-						<div className="relative flex-1">
+					<div className="flex gap-2 ms-auto w-full md:w-auto">
+						<div className="relative flex-1 min-w-0 md:w-48 md:flex-none">
 							<Input
 								placeholder={t`Filter...`}
 								onChange={(e) => setFilter(e.target.value)}
@@ -259,6 +283,16 @@ export default function SystemsTable() {
 								</Button>
 							)}
 						</div>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={refreshSystems}
+							disabled={isRefreshing}
+							aria-busy={isRefreshing}
+						>
+							<RefreshCwIcon className={cn("size-4", isRefreshing && "motion-safe:animate-spin")} aria-hidden="true" />
+							<Trans>Refresh systems</Trans>
+						</Button>
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button aria-label={t`View`} variant="outline" size="icon">
@@ -389,11 +423,16 @@ export default function SystemsTable() {
 		downSystemsLength,
 		pausedSystemsLength,
 		filter,
+		isRefreshing,
+		refreshSystems,
 	])
 
 	return (
 		<Card className="w-full px-3 py-5 sm:py-6 sm:px-6">
 			{CardHead}
+			<div className="mb-3 sm:mb-4">
+				<ClusterCapacity systems={data} />
+			</div>
 			{viewMode === "table" ? (
 				// table layout
 				<div className="rounded-md">

@@ -3,13 +3,12 @@ import { LoaderCircle, MailIcon, SendHorizonalIcon } from "lucide-react"
 import { useCallback, useState } from "react"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/otp"
 import { pb } from "@/lib/api"
-import { $authenticated } from "@/lib/stores"
 import { cn } from "@/lib/utils"
-import { $router } from "../router"
 import { buttonVariants } from "../ui/button"
 import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { showLoginFaliedToast } from "./auth-form"
+import { completeLogin } from "./complete-login"
 
 export function OtpInputForm({ otpId, mfaId }: { otpId: string; mfaId: string }) {
 	const [value, setValue] = useState("")
@@ -17,10 +16,7 @@ export function OtpInputForm({ otpId, mfaId }: { otpId: string; mfaId: string })
 	if (value.length === 6) {
 		pb.collection("users")
 			.authWithOTP(otpId, value, { mfaId })
-			.then(() => {
-				$router.open("/")
-				$authenticated.set(true)
-			})
+			.then(completeLogin)
 			.catch((err) => {
 				showLoginFaliedToast(err, err.message)
 			})

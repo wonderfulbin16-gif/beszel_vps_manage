@@ -518,3 +518,20 @@ func TestCpuQuotaCores(t *testing.T) {
 	require.True(t, ok)
 	assert.InDelta(t, 0.5, q, 0.001)
 }
+
+func TestScopedCPUCapacity(t *testing.T) {
+	swapCpuContainerSeams(t)
+	writeCpuFixture(t, procSelfCgroup, "0::/\n")
+	writeCpuFixture(t, cgroupMountinfo, "")
+	cpuNumCPU = func() int { return 8 }
+	require.NoError(t, os.MkdirAll(cgroupRoot, 0o755))
+	writeCpuFixture(t, filepath.Join(cgroupRoot, "cpuset.cpus.effective"), "0-7\n")
+	writeCpuFixture(t, filepath.Join(cgroupRoot, "cpu.max"), "max 100000\n")
+	assert.Zero(t, scopedCPUCapacity())
+
+	writeCpuFixture(t, filepath.Join(cgroupRoot, "cpu.max"), "65000 100000\n")
+	assert.Equal(t, 0.65, scopedCPUCapacity())
+	writeCpuFixture(t, filepath.Join(cgroupRoot, "cpu.max"), "250000 100000\n")
+	writeCpuFixture(t, filepath.Join(cgroupRoot, "cpuset.cpus.effective"), "0-1\n")
+	assert.Equal(t, 2.0, scopedCPUCapacity())
+}

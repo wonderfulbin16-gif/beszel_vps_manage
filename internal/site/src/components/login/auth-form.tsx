@@ -10,10 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { pb } from "@/lib/api"
-import { $authenticated } from "@/lib/stores"
 import { cn } from "@/lib/utils"
 import { $router, Link, basePath, prependBasePath } from "../router"
 import { toast } from "../ui/use-toast"
+import { completeLogin } from "./complete-login"
 import { OtpInputForm } from "./otp-forms"
 
 const emailSchema = v.pipe(v.string(), v.rfcEmail(t`Invalid email address.`))
@@ -113,7 +113,7 @@ export function UserAuthForm({
 				} else {
 					await pb.collection("users").authWithPassword(email, password)
 				}
-				$authenticated.set(true)
+				completeLogin()
 			} catch (err: any) {
 				const mfaId = err?.response?.mfaId
 				if (!mfaId) {
@@ -166,9 +166,7 @@ export function UserAuthForm({
 		}
 		pb.collection("users")
 			.authWithOAuth2(oAuthOpts)
-			.then(() => {
-				$authenticated.set(pb.authStore.isValid)
-			})
+			.then(completeLogin)
 			.catch((err: unknown) => showLoginFaliedToast(err))
 			.finally(() => {
 				setIsOauthLoading(false)
@@ -201,7 +199,7 @@ export function UserAuthForm({
 				setIsOauthLoading(true)
 				pb.collection("users")
 					.authWithOAuth2Code(provider.name, code, provider.codeVerifier, `${window.location.origin}${basePath}`)
-					.then(() => $authenticated.set(pb.authStore.isValid))
+					.then(completeLogin)
 					.catch((e: unknown) => showLoginFaliedToast(e, (e as Error).message))
 					.finally(() => setIsOauthLoading(false))
 			}

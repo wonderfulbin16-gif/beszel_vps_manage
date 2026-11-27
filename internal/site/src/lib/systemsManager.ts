@@ -13,11 +13,13 @@ import type { SystemRecord } from "@/types"
 import { SystemStatus } from "./enums"
 
 const COLLECTION = pb.collection<SystemRecord>("systems")
-const FIELDS_DEFAULT = "id,name,host,port,ip,ip_region,info,status"
+const FIELDS_DEFAULT = "id,name,host,port,ip,ip_region,info,status,capacity,capacity_override,cluster_excluded"
 
 let initialized = false
 // biome-ignore lint/suspicious/noConfusingVoidType: typescript rocks
 let unsub: (() => void) | undefined | void
+let subscriptionGeneration = 0
+let refreshRequest: { controller: AbortController; touched: Set<string>; promise: Promise<void> } | undefined
 
 /** Initialize the systems manager and set up listeners */
 export function init() {
@@ -28,6 +30,20 @@ export function init() {
 
 	// sync system stores on change
 	$allSystemsById.listen((newSystems, oldSystems, changedKey) => {
+		if (changedKey === undefined) {
+			const up: Record<string, SystemRecord> = {}
+			const down: Record<string, SystemRecord> = {}
+			const paused: Record<string, SystemRecord> = {}
+			for (const system of Object.values(newSystems)) {
+				if (system.status === SystemStatus.Up) up[system.id] = system
+				if (system.status === SystemStatus.Down) down[system.id] = system
+				if (system.status === SystemStatus.Paused) paused[system.id] = system
+			}
+			$upSystems.set(up)
+			$downSystems.set(down)
+			$pausedSystems.set(paused)
+			return
+		}
 		const oldSystem = oldSystems[changedKey]
 		const newSystem = newSystems[changedKey]
 
@@ -64,19 +80,9 @@ export function init() {
 	})
 }
 
-/** Fetch systems from collection */
-async function fetchSystems(): Promise<SystemRecord[]> {
-	try {
-		return await COLLECTION.getFullList({ sort: "+name", fields: FIELDS_DEFAULT })
-	} catch (error) {
-		console.error("Failed to fetch systems:", error)
-		return []
-	}
-}
-
 /** Makes sure the system has valid info object and throws if not */
 function validateSystemInfo(system: SystemRecord) {
-	if (!("cpu" in system.info)) {
+	if (!system.info || !("cpu" in system.info)) {
 		throw new Error(`${system.name} has no CPU info`)
 	}
 }
@@ -85,6 +91,7 @@ function validateSystemInfo(system: SystemRecord) {
 export function add(system: SystemRecord) {
 	try {
 		validateSystemInfo(system)
+		refreshRequest?.touched.add(system.id)
 		$allSystemsByName.setKey(system.name, system)
 		$allSystemsById.setKey(system.id, system)
 	} catch (error) {
@@ -98,7 +105,7 @@ export function update(system: SystemRecord) {
 		validateSystemInfo(system)
 		// if name changed, make sure old name is removed from the name store
 		const oldName = $allSystemsById.get()[system.id]?.name
-		if (oldName !== system.name) {
+		if (oldName && oldName !== system.name) {
 			$allSystemsByName.setKey(oldName, undefined as unknown as SystemRecord)
 		}
 		add(system)
@@ -109,6 +116,7 @@ export function update(system: SystemRecord) {
 
 /** Remove system from stores */
 export function remove(system: SystemRecord) {
+	refreshRequest?.touched.add(system.id)
 	removeFromStore(system, $allSystemsByName)
 	removeFromStore(system, $allSystemsById)
 	removeFromStore(system, $upSystems)
@@ -131,28 +139,77 @@ const actionFns: Record<string, (system: SystemRecord) => void> = {
 
 /** Subscribe to real-time system updates from the collection */
 export async function subscribe() {
+	const generation = ++subscriptionGeneration
 	try {
-		unsub = await COLLECTION.subscribe("*", ({ action, record }) => actionFns[action]?.(record), {
-			fields: FIELDS_DEFAULT,
-		})
+		const cleanup = await COLLECTION.subscribe(
+			"*",
+			({ action, record }) => {
+				if (generation === subscriptionGeneration) actionFns[action]?.(record)
+			},
+			{ fields: FIELDS_DEFAULT }
+		)
+		if (generation === subscriptionGeneration) {
+			unsub = cleanup
+		} else {
+			await cleanup()
+		}
 	} catch (error) {
 		console.error("Failed to subscribe to systems collection:", error)
 	}
 }
 
 /** Refresh all systems with latest data from the hub */
-export async function refresh() {
-	try {
-		const records = await fetchSystems()
-		for (const record of records) {
-			add(record)
-		}
-	} catch (error) {
-		console.error("Failed to refresh systems:", error)
-	} finally {
-		$systemsLoaded.set(true)
-	}
+export function refresh(): Promise<void> {
+	if (refreshRequest) return refreshRequest.promise
+
+	const controller = new AbortController()
+	const touched = new Set<string>()
+	const promise = COLLECTION.getFullList({
+		sort: "+name",
+		fields: FIELDS_DEFAULT,
+		signal: controller.signal,
+		requestKey: null,
+	})
+		.then((records) => {
+			if (controller.signal.aborted) return
+
+			const byId: Record<string, SystemRecord> = {}
+			for (const record of records) {
+				try {
+					validateSystemInfo(record)
+					byId[record.id] = record
+				} catch (error) {
+					console.error(error)
+				}
+			}
+
+			// Keep updates and deletions that arrived while the list was loading.
+			const current = $allSystemsById.get()
+			for (const id of touched) {
+				if (current[id]) byId[id] = current[id]
+				else delete byId[id]
+			}
+
+			$allSystemsByName.set(Object.fromEntries(Object.values(byId).map((system) => [system.name, system])))
+			$allSystemsById.set(byId)
+		})
+		.finally(() => {
+			if (refreshRequest?.controller === controller) {
+				refreshRequest = undefined
+				$systemsLoaded.set(true)
+			}
+		})
+	refreshRequest = { controller, touched, promise }
+	return promise
 }
 
 /** Unsubscribe from real-time system updates */
-export const unsubscribe = () => (unsub = unsub?.())
+export function unsubscribe() {
+	refreshRequest?.controller.abort()
+	refreshRequest = undefined
+	$systemsLoaded.set(false)
+	subscriptionGeneration++
+	const cleanup = unsub
+	unsub = undefined
+	cleanup?.()
+}
