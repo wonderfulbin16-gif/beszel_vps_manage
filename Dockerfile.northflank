@@ -27,15 +27,16 @@ RUN go mod download
 COPY . ./
 COPY --from=web /app/internal/site/dist ./internal/site/dist
 ENV CGO_ENABLED=0
-RUN mkdir -p /runtime/tmp /runtime/beszel_data \
+RUN go test ./internal/cmd/northflank-supervisor \
+    && mkdir -p /runtime/tmp /runtime/beszel_data \
     && chmod 1777 /runtime/tmp \
     && go build -trimpath -ldflags='-w -s' -o /runtime/beszel ./internal/cmd/hub \
     && go build -trimpath -ldflags='-w -s' -o /runtime/agent ./internal/cmd/agent \
     && go build -trimpath -ldflags='-w -s' -o /runtime/beszel-supervisor ./internal/cmd/northflank-supervisor
 
-FROM scratch
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+RUN apk add --no-cache ca-certificates python3
 COPY --from=build /runtime/ /
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=geoip /geoip/ /geoip/
 ENV BESZEL_GEOIP_DB=/geoip/dbip-city-lite.mmdb
 VOLUME ["/beszel_data"]

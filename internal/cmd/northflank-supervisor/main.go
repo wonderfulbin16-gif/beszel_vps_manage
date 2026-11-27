@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +26,8 @@ var (
 	dataPath   = "/beszel_data"
 	socketPath = "/run/beszel/agent.sock"
 )
+
+var errCollectorNotConfigured = errors.New("collector is not configured")
 
 type supervisorConfig struct {
 	hubPath, agentPath, dataPath, keyPath, socketPath string
@@ -56,22 +59,24 @@ func supervise(config supervisorConfig, signals <-chan os.Signal) int {
 	}
 	hubDone := waitForProcess(hub)
 
-	agentContext, stopAgent := context.WithCancel(context.Background())
-	agentDone := make(chan struct{})
-	go func() {
-		defer close(agentDone)
-		retryAgent(agentContext, config)
-	}()
+	workerContext, stopWorkers := context.WithCancel(context.Background())
+	var workers sync.WaitGroup
+	workers.Go(func() {
+		retryWorker(workerContext, config, "Beszel Agent", runAgent)
+	})
+	workers.Go(func() {
+		retryWorker(workerContext, config, "Opportunity Collector", runCollector)
+	})
 
 	var hubResult error
 	select {
 	case hubResult = <-hubDone:
-		stopAgent()
+		stopWorkers()
 	case shutdownSignal := <-signals:
-		stopAgent()
+		stopWorkers()
 		hubResult = stopProcess(hub, hubDone, shutdownSignal, config.shutdownTimeout)
 	}
-	<-agentDone
+	workers.Wait()
 
 	var exitError *exec.ExitError
 	switch {
@@ -88,10 +93,10 @@ func supervise(config supervisorConfig, signals <-chan os.Signal) int {
 	}
 }
 
-func retryAgent(ctx context.Context, config supervisorConfig) {
+func retryWorker(ctx context.Context, config supervisorConfig, name string, run func(context.Context, supervisorConfig) error) {
 	var lastFailure string
 	for ctx.Err() == nil {
-		err := runAgent(ctx, config)
+		err := run(ctx, config)
 		if ctx.Err() != nil {
 			return
 		}
@@ -99,8 +104,8 @@ func retryAgent(ctx context.Context, config supervisorConfig) {
 		if err != nil {
 			failure = err.Error()
 		}
-		if failure != lastFailure {
-			log.Printf("Beszel Agent stopped (%s), retrying in %s", failure, config.retryDelay)
+		if !errors.Is(err, errCollectorNotConfigured) && failure != lastFailure {
+			log.Printf("%s stopped (%s), retrying in %s", name, failure, config.retryDelay)
 			lastFailure = failure
 		}
 		timer := time.NewTimer(config.retryDelay)
@@ -154,12 +159,53 @@ func runAgent(ctx context.Context, config supervisorConfig) error {
 	if err := agent.Start(); err != nil {
 		return errors.New("process could not be started")
 	}
-	done := waitForProcess(agent)
+	return waitForWorker(ctx, agent, config.shutdownTimeout)
+}
+
+func runCollector(ctx context.Context, config supervisorConfig) error {
+	root := filepath.Join(config.dataPath, "opportunity-collector")
+	access := filepath.Join(root, "access.json")
+	program := filepath.Join(root, "collector.py")
+	for _, path := range []string{access, program} {
+		file, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return errCollectorNotConfigured
+		}
+		if err != nil {
+			return err
+		}
+		if !file.Mode().IsRegular() {
+			return errors.New("collector configuration is not a regular file")
+		}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	output, err := os.OpenFile(filepath.Join(root, "collector.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	collector := exec.Command("python3", "-Bu", program, "--platform", "linux",
+		"--access", access, "--state-dir", filepath.Join(root, "state"))
+	collector.Dir = root
+	collector.Stdout, collector.Stderr = output, output
+	collector.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + root, "TMPDIR=/tmp"}
+	if err := collector.Start(); err != nil {
+		return err
+	}
+	return waitForWorker(ctx, collector, config.shutdownTimeout)
+}
+
+func waitForWorker(ctx context.Context, command *exec.Cmd, shutdownTimeout time.Duration) error {
+	done := waitForProcess(command)
 	select {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		return stopProcess(agent, done, syscall.SIGTERM, config.shutdownTimeout)
+		return stopProcess(command, done, syscall.SIGTERM, shutdownTimeout)
 	}
 }
 

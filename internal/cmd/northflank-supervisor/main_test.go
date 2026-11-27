@@ -109,6 +109,77 @@ while :; do sleep 0.02; done
 	awaitFile(t, filepath.Join(dir, "agent.stopped"), func(s string) bool { return s == "stopped\n" })
 }
 
+func TestCollectorStartsAfterConfigurationAndRetriesAlongsideHub(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TOKEN", "hub-only")
+	collectorDir := filepath.Join(dir, "opportunity-collector")
+	if err := os.Mkdir(collectorDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	program := filepath.Join(collectorDir, "collector.py")
+	access := filepath.Join(collectorDir, "access.json")
+	if err := os.WriteFile(program, []byte("# test fixture LF\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hub := writeExecutable(t, dir, "hub", `echo "$$" > "`+dir+`/hub.pid"
+trap 'exit 0' TERM
+while :; do sleep 0.02; done
+`)
+	agent := writeExecutable(t, dir, "agent", `trap 'exit 0' TERM
+while :; do sleep 0.02; done
+`)
+	writeExecutable(t, dir, "python3", `test -z "$TOKEN" || exit 2
+test "$1" = -Bu && test "$2" = "`+program+`" || exit 3
+test "$3" = --platform && test "$4" = linux || exit 4
+test "$5" = --access && test "$6" = "`+access+`" && test -r "$6" || exit 5
+test "$7" = --state-dir && test "$8" = "`+collectorDir+`/state" || exit 6
+if ! test -f "`+dir+`/collector.first"; then
+	echo first > "`+dir+`/collector.first"
+	exit 7
+fi
+trap 'echo stopped > "`+dir+`/collector.stopped"; exit 0' TERM
+echo "$$" > "`+dir+`/collector.pid"
+while :; do sleep 0.02; done
+`)
+	keyFile, _ := writeFixtureKey(t, dir)
+	signals := make(chan os.Signal, 1)
+	done := make(chan int, 1)
+	go func() {
+		done <- supervise(supervisorConfig{
+			hubPath: hub, agentPath: agent, dataPath: dir, keyPath: keyFile,
+			socketPath: filepath.Join(dir, "agent.sock"), retryDelay: 10 * time.Millisecond,
+			shutdownTimeout: time.Second,
+		}, signals)
+	}()
+	t.Cleanup(func() {
+		select {
+		case signals <- syscall.SIGTERM:
+		default:
+		}
+	})
+
+	hubPID := awaitFile(t, filepath.Join(dir, "hub.pid"), func(s string) bool { return s != "" })
+	if err := os.WriteFile(access, []byte("{}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	awaitFile(t, filepath.Join(dir, "collector.pid"), func(s string) bool { return s != "" })
+	runningHubPID, err := os.ReadFile(filepath.Join(dir, "hub.pid"))
+	if err != nil || string(runningHubPID) != hubPID {
+		t.Fatalf("collector restart affected the Hub process: %q, %v", runningHubPID, err)
+	}
+	signals <- syscall.SIGTERM
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("supervisor exit after shutdown = %d", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not stop")
+	}
+	awaitFile(t, filepath.Join(dir, "collector.stopped"), func(s string) bool { return s == "stopped\n" })
+}
+
 func writeExecutable(t *testing.T, dir, name, script string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
