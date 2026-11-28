@@ -685,25 +685,25 @@ function ResourceCell({ info, metric }: { info: CellContext<SystemRecord, unknow
 			<div className="text-xs leading-tight whitespace-normal text-muted-foreground tabular-nums">
 				{available !== undefined && capacity !== undefined ? (
 					<>
-						<Trans>Available</Trans>{" "}
+						<span className="sr-only">
+							<Trans>Available</Trans>{" "}
+						</span>
 						<span className={valueClass}>
 							{formatNumber(available)} / {formatNumber(capacity)} GiB
 						</span>
 					</>
+				) : capacity === undefined ? (
+					<span title={t`Unknown`}>—</span>
 				) : (
 					<>
 						{metric !== "cpu" && (
-							<>
+							<span className="sr-only">
 								<Trans>Capacity</Trans>{" "}
-							</>
-						)}
-						{capacity === undefined ? (
-							<span title={t`Unknown`}>—</span>
-						) : (
-							<span className={valueClass}>
-								{formatNumber(capacity)} {metric === "cpu" ? "vCPU" : "GiB"}
 							</span>
 						)}
+						<span className={valueClass}>
+							{formatNumber(capacity)} {metric === "cpu" ? "vCPU" : "GiB"}
+						</span>
 					</>
 				)}
 			</div>
